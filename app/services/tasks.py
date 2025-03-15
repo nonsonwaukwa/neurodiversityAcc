@@ -21,14 +21,13 @@ class TaskService:
             "Take a 5-minute break to move around"
         ])
     
-    def create_task(self, user_id, description, category=Task.CATEGORY_OTHER):
+    def create_task(self, user_id, description):
         """
         Create a new task for a user
         
         Args:
             user_id (str): The user's ID
             description (str): The task description
-            category (str): The task category
             
         Returns:
             Task: The created task
@@ -39,7 +38,7 @@ class TaskService:
             raise ValueError(f"User with ID {user_id} not found")
         
         # Create the task
-        task = Task.create(user_id, description, category)
+        task = Task.create(user_id, description)
         
         return task
     

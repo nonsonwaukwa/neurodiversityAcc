@@ -249,21 +249,22 @@ def create_user():
 def create_user_task(user_id):
     """Create a new task for a user"""
     try:
-        data = request.json
-        
-        # Validate required fields
-        if 'description' not in data:
-            return jsonify({"error": "Missing required fields"}), 400
-        
-        # Check if user exists
+        # Validate that the user exists
         user = User.get(user_id)
         if not user:
             return jsonify({"error": "User not found"}), 404
         
-        # Create task
-        task_service = get_task_service()
-        category = data.get('category', Task.CATEGORY_OTHER)
-        task = task_service.create_task(user_id, data['description'], category)
+        # Get task data from request
+        data = request.json
+        if not data:
+            return jsonify({"error": "Missing request body"}), 400
+        
+        description = data.get('description')
+        if not description:
+            return jsonify({"error": "Task description is required"}), 400
+        
+        # Create the task
+        task = Task.create(user_id, description)
         
         return jsonify({"task": task.to_dict()}), 201
     

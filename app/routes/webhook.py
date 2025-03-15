@@ -61,6 +61,19 @@ def webhook():
             logger.error(f"Error processing webhook: {e}")
             return jsonify({"error": str(e)}), 500
 
+@webhook_bp.route('/test-verify-token', methods=['GET'])
+def test_verify_token():
+    """Test route to check if the webhook verify token is accessible"""
+    # Get the token from environment
+    token = os.environ.get('WHATSAPP_VERIFY_TOKEN')
+    # Return details about the token
+    return jsonify({
+        "token_exists": token is not None,
+        "token_length": len(token) if token else 0,
+        "token_first_char": token[0] if token else None,
+        "token_last_char": token[-1] if token else None
+    })
+
 def process_message(message):
     """
     Process an incoming WhatsApp message

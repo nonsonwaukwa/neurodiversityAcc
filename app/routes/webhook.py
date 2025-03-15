@@ -34,12 +34,17 @@ def webhook():
         logger.info(f"Expected verify token from env: {expected_token}")
         logger.info(f"hub.challenge: {challenge}")
         
-        # Handle verification request
-        if mode == 'subscribe' and token == expected_token:
-            logger.info("Webhook verification successful")
+        # Handle verification request - try the environment variable first
+        if mode == 'subscribe' and token == expected_token and expected_token is not None:
+            logger.info("Webhook verification successful using environment variable token")
+            return challenge
+        # Fallback to hardcoded token for debugging
+        elif mode == 'subscribe' and token == 'odinma_accountability_webhook':
+            logger.info("Webhook verification successful using hardcoded token")
             return challenge
         else:
-            logger.error(f"Webhook verification failed. Token match: {token == expected_token}")
+            logger.error(f"Webhook verification failed. Token match with env var: {token == expected_token}")
+            logger.error(f"Token match with hardcoded: {token == 'odinma_accountability_webhook'}")
             return jsonify({"error": "Verification failed"}), 403
     
     elif request.method == 'POST':

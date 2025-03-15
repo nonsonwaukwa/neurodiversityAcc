@@ -12,6 +12,7 @@ class Config:
     
     # WhatsApp API Settings
     WHATSAPP_API_URL = os.environ.get('WHATSAPP_API_URL', 'https://graph.facebook.com/v17.0')
+    WHATSAPP_VERIFY_TOKEN = os.environ.get('WHATSAPP_VERIFY_TOKEN', 'odinma_accountability_webhook')
     
     # Multiple WhatsApp accounts configuration
     # First account
@@ -52,16 +53,14 @@ class Config:
     
     # ADHD Hacks and Strategies
     ADHD_HACKS = [
-        "Break your task into smaller steps - what's the first tiny step?",
-        "Try the 5-minute rule - commit to just 5 minutes, then decide if you want to continue",
-        "Body doubling: Find someone to work alongside you (even virtually)",
-        "Pomodoro technique: 25 minutes work, 5 minutes break",
-        "Change your environment - move to a different room or location",
-        "Use noise-cancelling headphones or background music without lyrics",
-        "Set a timer with a specific deadline",
-        "Reward yourself after task completion",
-        "Use the 'if-then' method - tie your task to an existing habit",
-        "Eliminate distractions: put your phone in another room",
-        "Visualize your success and how you'll feel after completion",
-        "Try standing or walking while working on this task"
+        "Break the task into smaller, manageable chunks",
+        "Set a timer for 25 minutes and focus only on this task",
+        "Create a checklist for the steps needed",
+        "Remove distractions from your environment",
+        "Use the 'body doubling' technique - work alongside someone else",
+        "Take a 5-minute break to move around",
+        "Write down your thoughts to clear your mind",
+        "Use the '2-minute rule' - if it takes less than 2 minutes, do it now",
+        "Set up a reward for completing the task",
+        "Visualize yourself completing the task successfully"
     ] 

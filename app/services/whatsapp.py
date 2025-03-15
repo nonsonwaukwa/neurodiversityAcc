@@ -163,13 +163,16 @@ class WhatsAppService:
             request_args: The request arguments
             
         Returns:
-            bool: True if verification succeeded, False otherwise
+            str or bool: Challenge string if verification succeeded, False otherwise
         """
         mode = request_args.get('hub.mode')
         token = request_args.get('hub.verify_token')
         challenge = request_args.get('hub.challenge')
         
-        verify_token = os.environ.get('WHATSAPP_VERIFY_TOKEN', 'default-verify-token')
+        verify_token = current_app.config.get('WHATSAPP_VERIFY_TOKEN', os.environ.get('WHATSAPP_VERIFY_TOKEN'))
+        
+        if not verify_token:
+            verify_token = 'odinma_accountability_webhook'  # Default token
         
         # Check if the mode and token are as expected
         if mode == 'subscribe' and token == verify_token:

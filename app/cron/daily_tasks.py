@@ -1,4 +1,3 @@
-from apscheduler.triggers.cron import CronTrigger
 from app.models.user import User
 from app.models.checkin import CheckIn
 from app.services.whatsapp import get_whatsapp_service
@@ -103,29 +102,4 @@ def send_daily_tasks():
                 logger.info(f"Successfully processed daily tasks for user {user.user_id} (account {account_index})")
             
             except Exception as e:
-                logger.error(f"Error processing daily tasks for user {user.user_id}: {e}")
-
-def schedule_daily_tasks(scheduler):
-    """
-    Schedule the daily tasks cron job
-    
-    Args:
-        scheduler: The scheduler instance
-    """
-    # Get the daily task time from config
-    daily_task_time = current_app.config.get('DAILY_TASK_TIME', '09:00')
-    hour, minute = daily_task_time.split(':')
-    
-    # Create a cron trigger
-    trigger = CronTrigger(hour=hour, minute=minute)
-    
-    # Add the job to the scheduler
-    scheduler.add_job(
-        send_daily_tasks,
-        trigger=trigger,
-        id='daily_tasks',
-        name='Daily Tasks',
-        replace_existing=True
-    )
-    
-    logger.info(f"Scheduled daily tasks for {daily_task_time}") 
+                logger.error(f"Error processing daily tasks for user {user.user_id}: {e}") 

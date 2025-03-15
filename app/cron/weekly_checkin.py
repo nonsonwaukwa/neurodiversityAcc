@@ -1,7 +1,5 @@
-from apscheduler.triggers.cron import CronTrigger
 from app.models.user import User
 from app.services.whatsapp import get_whatsapp_service
-from flask import current_app
 import logging
 
 # Set up logger
@@ -47,35 +45,4 @@ def send_weekly_checkin():
                     logger.error(f"Failed to send weekly check-in to user {user.user_id}")
             
             except Exception as e:
-                logger.error(f"Error sending weekly check-in to user {user.user_id}: {e}")
-
-def schedule_weekly_checkin(scheduler):
-    """
-    Schedule the weekly check-in cron job
-    
-    Args:
-        scheduler: The scheduler instance
-    """
-    # Get the weekly check-in time and day from config
-    weekly_checkin_time = current_app.config.get('WEEKLY_CHECKIN_TIME', '09:00')
-    weekly_checkin_day = int(current_app.config.get('WEEKLY_CHECKIN_DAY', '6'))  # 6 = Sunday
-    
-    hour, minute = weekly_checkin_time.split(':')
-    
-    # Create a cron trigger for the specified day
-    trigger = CronTrigger(day_of_week=weekly_checkin_day, hour=hour, minute=minute)
-    
-    # Add the job to the scheduler
-    scheduler.add_job(
-        send_weekly_checkin,
-        trigger=trigger,
-        id='weekly_checkin',
-        name='Weekly Mental Check-In',
-        replace_existing=True
-    )
-    
-    # Map day number to name for logging
-    day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-    day_name = day_names[weekly_checkin_day]
-    
-    logger.info(f"Scheduled weekly check-in for {day_name} at {weekly_checkin_time}") 
+                logger.error(f"Error sending weekly check-in to user {user.user_id}: {e}") 

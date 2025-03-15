@@ -1,165 +1,183 @@
 from datetime import datetime
 from config.firebase_config import get_db
+import logging
+
+logger = logging.getLogger(__name__)
 
 class User:
-    """User model representing a user in the system"""
+    """User model for the accountability system"""
     
-    COLLECTION = 'users'
-    
-    def __init__(self, user_id, name, user_type='Human', account_index=0, created_at=None, last_active=None, sentiment_scores=None):
+    def __init__(self, user_id, name, role='user', account_index=0, planning_type='daily',
+                 last_active=None, sentiment_history=None):
         """
-        Initialize a User object
+        Initialize a user
         
         Args:
-            user_id (str): Unique identifier (WhatsApp number)
-            name (str): User's name
-            user_type (str): 'AI' or 'Human'
-            account_index (int): Index of the Meta account the user belongs to (0 or 1)
-            created_at (datetime): Date/time user was added
-            last_active (datetime): Last time user interacted
-            sentiment_scores (list): List of sentiment scores
+            user_id (str): The user's WhatsApp number
+            name (str): The user's name
+            role (str): The user's role (user or admin)
+            account_index (int): The Meta account index this user belongs to
+            planning_type (str): The user's planning type (weekly or daily)
+            last_active (datetime): When the user was last active
+            sentiment_history (list): History of sentiment scores
         """
         self.user_id = user_id
         self.name = name
-        self.type = user_type
+        self.role = role
         self.account_index = account_index
-        self.created_at = created_at or datetime.now()
+        self.planning_type = planning_type
         self.last_active = last_active or datetime.now()
-        self.sentiment_scores = sentiment_scores or []
+        self.sentiment_history = sentiment_history or []
+    
+    def to_dict(self):
+        """Convert the user to a dictionary"""
+        return {
+            'user_id': self.user_id,
+            'name': self.name,
+            'role': self.role,
+            'account_index': self.account_index,
+            'planning_type': self.planning_type,
+            'last_active': self.last_active,
+            'sentiment_history': self.sentiment_history
+        }
     
     @classmethod
-    def create(cls, user_id, name, user_type='Human', account_index=0):
+    def from_dict(cls, data):
+        """Create a user from a dictionary"""
+        return cls(
+            user_id=data.get('user_id'),
+            name=data.get('name'),
+            role=data.get('role', 'user'),
+            account_index=data.get('account_index', 0),
+            planning_type=data.get('planning_type', 'daily'),
+            last_active=data.get('last_active'),
+            sentiment_history=data.get('sentiment_history', [])
+        )
+    
+    @classmethod
+    def create(cls, user_id, name, role='user', account_index=0, planning_type='daily'):
         """
-        Create a new user in the database
+        Create a new user
         
         Args:
-            user_id (str): Unique identifier (WhatsApp number)
-            name (str): User's name
-            user_type (str): 'AI' or 'Human'
-            account_index (int): Index of the Meta account the user belongs to (0 or 1)
+            user_id (str): The user's WhatsApp number
+            name (str): The user's name
+            role (str): The user's role (user or admin)
+            account_index (int): The Meta account index this user belongs to
+            planning_type (str): The user's planning type (weekly or daily)
             
         Returns:
-            User: The created user object
+            User: The created user
         """
-        user = cls(user_id, name, user_type, account_index)
+        db = get_db()
         
-        # Convert to dictionary for Firestore
-        user_data = {
-            'user_id': user.user_id,
-            'name': user.name,
-            'type': user.type,
-            'account_index': user.account_index,
-            'created_at': user.created_at,
-            'last_active': user.last_active,
-            'sentiment_scores': user.sentiment_scores
-        }
+        # Create user object
+        user = cls(
+            user_id=user_id,
+            name=name,
+            role=role,
+            account_index=account_index,
+            planning_type=planning_type
+        )
         
-        # Add to Firestore
-        get_db().collection(cls.COLLECTION).document(user_id).set(user_data)
+        # Save to database
+        db.collection('users').document(user_id).set(user.to_dict())
         
         return user
     
     @classmethod
     def get(cls, user_id):
         """
-        Retrieve a user from the database
+        Get a user by ID
         
         Args:
-            user_id (str): The user's ID
+            user_id (str): The user's WhatsApp number
             
         Returns:
-            User: The user object if found, None otherwise
+            User: The user, or None if not found
         """
-        doc = get_db().collection(cls.COLLECTION).document(user_id).get()
+        db = get_db()
+        doc = db.collection('users').document(user_id).get()
         
-        if not doc.exists:
-            return None
+        if doc.exists:
+            return cls.from_dict(doc.to_dict())
         
-        user_data = doc.to_dict()
-        return cls(
-            user_id=user_data.get('user_id'),
-            name=user_data.get('name'),
-            user_type=user_data.get('type'),
-            account_index=user_data.get('account_index', 0),
-            created_at=user_data.get('created_at'),
-            last_active=user_data.get('last_active'),
-            sentiment_scores=user_data.get('sentiment_scores', [])
-        )
+        return None
     
     @classmethod
-    def get_all(cls, user_type=None, account_index=None):
+    def get_all(cls):
         """
-        Retrieve all users from the database, optionally filtered by type and account
+        Get all users
         
-        Args:
-            user_type (str, optional): Filter by user type ('AI' or 'Human')
-            account_index (int, optional): Filter by account index (0 or 1)
-            
         Returns:
-            list: List of User objects
+            list: List of users
         """
-        query = get_db().collection(cls.COLLECTION)
-        
-        if user_type:
-            query = query.where('type', '==', user_type)
-        
-        if account_index is not None:
-            query = query.where('account_index', '==', account_index)
-        
-        docs = query.stream()
-        
+        db = get_db()
         users = []
-        for doc in docs:
-            user_data = doc.to_dict()
-            users.append(cls(
-                user_id=user_data.get('user_id'),
-                name=user_data.get('name'),
-                user_type=user_data.get('type'),
-                account_index=user_data.get('account_index', 0),
-                created_at=user_data.get('created_at'),
-                last_active=user_data.get('last_active'),
-                sentiment_scores=user_data.get('sentiment_scores', [])
-            ))
+        
+        for doc in db.collection('users').stream():
+            users.append(cls.from_dict(doc.to_dict()))
         
         return users
+    
+    def update(self):
+        """Update the user in the database"""
+        db = get_db()
+        db.collection('users').document(self.user_id).update(self.to_dict())
     
     def update_last_active(self):
         """Update the user's last active timestamp"""
         self.last_active = datetime.now()
-        get_db().collection(self.COLLECTION).document(self.user_id).update({
-            'last_active': self.last_active
-        })
+        self.update()
     
-    def add_sentiment_score(self, score, timestamp=None):
+    def add_sentiment_score(self, score):
         """
         Add a sentiment score to the user's history
         
         Args:
             score (float): The sentiment score
-            timestamp (datetime, optional): Time of the score
         """
-        if timestamp is None:
-            timestamp = datetime.now()
-        
-        sentiment_entry = {
-            'score': score,
-            'timestamp': timestamp
-        }
-        
-        self.sentiment_scores.append(sentiment_entry)
-        
-        get_db().collection(self.COLLECTION).document(self.user_id).update({
-            'sentiment_scores': self.sentiment_scores
-        })
+        if score is not None:
+            self.sentiment_history.append({
+                'score': score,
+                'timestamp': datetime.now()
+            })
+            
+            # Keep only the last 10 scores
+            if len(self.sentiment_history) > 10:
+                self.sentiment_history = self.sentiment_history[-10:]
+            
+            self.update()
     
-    def to_dict(self):
-        """Convert the user object to a dictionary"""
-        return {
-            'user_id': self.user_id,
-            'name': self.name,
-            'type': self.type,
-            'account_index': self.account_index,
-            'created_at': self.created_at,
-            'last_active': self.last_active,
-            'sentiment_scores': self.sentiment_scores
-        } 
+    def update_planning_type(self, planning_type):
+        """
+        Update the user's planning type
+        
+        Args:
+            planning_type (str): The new planning type (weekly or daily)
+        """
+        self.planning_type = planning_type
+        self.update()
+        
+    def get_average_sentiment(self, days=7):
+        """
+        Get the user's average sentiment over the past days
+        
+        Args:
+            days (int): Number of days to look back
+            
+        Returns:
+            float: Average sentiment, or None if no data
+        """
+        if not self.sentiment_history:
+            return None
+        
+        # Filter by recency
+        cutoff = datetime.now() - datetime.timedelta(days=days)
+        recent_scores = [item['score'] for item in self.sentiment_history 
+                        if item['timestamp'] > cutoff]
+        
+        if not recent_scores:
+            return None
+        
+        return sum(recent_scores) / len(recent_scores) 

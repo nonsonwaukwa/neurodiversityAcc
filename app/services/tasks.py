@@ -3,13 +3,23 @@ from datetime import datetime
 from app.models.task import Task
 from app.models.user import User
 from config.settings import Config
+from flask import current_app
+import logging
+
+logger = logging.getLogger(__name__)
 
 class TaskService:
     """Service for managing tasks and providing ADHD-friendly strategies"""
     
     def __init__(self):
         """Initialize the task service"""
-        self.adhd_hacks = Config.ADHD_HACKS
+        self.adhd_hacks = current_app.config.get('ADHD_HACKS', [
+            "Break the task into smaller, manageable chunks",
+            "Set a timer for 25 minutes and focus only on this task",
+            "Remove distractions from your environment",
+            "Try the 'body doubling' technique - work alongside someone else",
+            "Take a 5-minute break to move around"
+        ])
     
     def create_task(self, user_id, description, category=Task.CATEGORY_OTHER):
         """
@@ -66,25 +76,17 @@ class TaskService:
         """
         return Task.get_for_user(user_id, status, limit)
     
-    def get_adhd_hack(self, task_id=None):
+    def get_adhd_hack(self):
         """
-        Get a random ADHD-friendly strategy
+        Get a random ADHD-friendly hack
         
-        Args:
-            task_id (str, optional): The task ID to mark as having used a hack
-            
         Returns:
             str: An ADHD-friendly strategy
         """
-        hack = random.choice(self.adhd_hacks)
+        if not self.adhd_hacks:
+            return "Break your task into smaller steps."
         
-        # If task_id is provided, mark that a hack was used for this task
-        if task_id:
-            task = Task.get(task_id)
-            if task:
-                task.mark_hack_used()
-        
-        return hack
+        return random.choice(self.adhd_hacks)
     
     def parse_task_update(self, message_text):
         """
@@ -147,13 +149,138 @@ class TaskService:
             "in_progress_count": in_progress_count,
             "completion_rate": completion_rate
         }
+    
+    def create_weekly_tasks(self, user_id, tasks_by_day):
+        """
+        Create weekly scheduled tasks
+        
+        Args:
+            user_id (str): The user's ID
+            tasks_by_day (dict): Dictionary mapping days to task lists
+            
+        Returns:
+            dict: Created tasks by day
+        """
+        created_tasks = {}
+        
+        for day_str, task_list in tasks_by_day.items():
+            try:
+                # Parse day into datetime
+                day_date = parse_date(day_str)
+                
+                day_tasks = []
+                for task_desc in task_list:
+                    task = Task.create(user_id, task_desc, scheduled_date=day_date)
+                    day_tasks.append(task)
+                
+                created_tasks[day_str] = day_tasks
+            
+            except Exception as e:
+                logger.error(f"Error creating tasks for day {day_str}: {e}")
+        
+        return created_tasks
+    
+    def get_tasks_for_day(self, user_id, date):
+        """
+        Get tasks scheduled for a specific day
+        
+        Args:
+            user_id (str): The user's ID
+            date (datetime): The day to get tasks for
+            
+        Returns:
+            list: Tasks for the day
+        """
+        return Task.get_for_user(user_id, scheduled_date=date)
+    
+    def get_pending_tasks(self, user_id):
+        """
+        Get all pending tasks for a user
+        
+        Args:
+            user_id (str): The user's ID
+            
+        Returns:
+            list: Pending tasks
+        """
+        return Task.get_for_user(user_id, status=Task.STATUS_PENDING)
 
 # Create singleton instance
 _task_service = None
 
 def get_task_service():
-    """Get the task service instance"""
+    """
+    Get an instance of the task service
+    
+    Returns:
+        TaskService: The task service instance
+    """
     global _task_service
     if _task_service is None:
         _task_service = TaskService()
-    return _task_service 
+    return _task_service
+
+def parse_date(date_str):
+    """
+    Parse a date string into a datetime object
+    
+    Args:
+        date_str (str): Date string in format YYYY-MM-DD
+        
+    Returns:
+        datetime: Parsed date
+    """
+    if isinstance(date_str, datetime):
+        return date_str
+    
+    # Try different formats
+    formats = [
+        '%Y-%m-%d',  # 2023-01-01
+        '%d/%m/%Y',  # 01/01/2023
+        '%m/%d/%Y',  # 01/01/2023
+        '%d-%m-%Y',  # 01-01-2023
+        '%d %b %Y',  # 01 Jan 2023
+        '%d %B %Y'   # 01 January 2023
+    ]
+    
+    for fmt in formats:
+        try:
+            return datetime.strptime(date_str, fmt)
+        except ValueError:
+            continue
+    
+    raise ValueError(f"Unable to parse date string: {date_str}")
+
+def send_task_buttons(user, task):
+    """
+    Send interactive buttons for a task
+    
+    Args:
+        user (User): The user
+        task (Task): The task
+    """
+    from app.services.whatsapp import get_whatsapp_service
+    
+    whatsapp_service = get_whatsapp_service(user.account_index)
+    
+    buttons = [
+        {
+            "id": f"task_{task.task_id}_done",
+            "title": "✅ Done"
+        },
+        {
+            "id": f"task_{task.task_id}_progress",
+            "title": "🔄 In Progress"
+        },
+        {
+            "id": f"task_{task.task_id}_stuck",
+            "title": "❌ Stuck"
+        }
+    ]
+    
+    whatsapp_service.send_interactive_message(
+        user.user_id,
+        f"Task: {task.description}",
+        "How are you progressing with this task?",
+        buttons
+    ) 

@@ -6,6 +6,7 @@ from app.models.user import User
 from app.models.checkin import CheckIn
 import json
 import logging
+import os
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -21,11 +22,24 @@ def webhook():
     whatsapp_service = get_whatsapp_service(0)
     
     if request.method == 'GET':
+        # Enhanced logging for webhook verification
+        mode = request.args.get('hub.mode')
+        token = request.args.get('hub.verify_token')
+        challenge = request.args.get('hub.challenge')
+        expected_token = os.environ.get('WHATSAPP_VERIFY_TOKEN')
+        
+        logger.info(f"Webhook verification request received")
+        logger.info(f"hub.mode: {mode}")
+        logger.info(f"hub.verify_token (received): {token}")
+        logger.info(f"Expected verify token from env: {expected_token}")
+        logger.info(f"hub.challenge: {challenge}")
+        
         # Handle verification request
-        challenge = whatsapp_service.verify_webhook(request.args)
-        if challenge:
+        if mode == 'subscribe' and token == expected_token:
+            logger.info("Webhook verification successful")
             return challenge
         else:
+            logger.error(f"Webhook verification failed. Token match: {token == expected_token}")
             return jsonify({"error": "Verification failed"}), 403
     
     elif request.method == 'POST':

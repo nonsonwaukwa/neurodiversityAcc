@@ -169,9 +169,9 @@ class WhatsAppService:
         token = request_args.get('hub.verify_token')
         challenge = request_args.get('hub.challenge')
         
-        verify_token = os.environ.get('WHATSAPP_VERIFY_TOKEN', 'default-verify-token')
+        verify_token = os.environ.get('WHATSAPP_VERIFY_TOKEN')
         
-        # Check if the mode and token are as expected
+        # Check if mode and token match expected values
         if mode == 'subscribe' and token == verify_token:
             return challenge
         

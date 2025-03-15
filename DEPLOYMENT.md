@@ -16,7 +16,7 @@ The system is designed with the following components:
 Before deploying, you need to have access to:
 - WhatsApp Business API credentials for 2 accounts
 - A secure random string for your CRON_SECRET
-- Firebase configuration (if using Firebase)
+- Firebase configuration (service account credentials)
 
 ### 2. Deploy the Main Application
 
@@ -45,10 +45,15 @@ Before deploying, you need to have access to:
      WHATSAPP_PHONE_NUMBER_ID_2=your-second-account-id
      WHATSAPP_ACCESS_TOKEN_2=your-second-account-token
      
+     # Firebase Configuration (Either use FIREBASE_CREDENTIALS or FIREBASE_CREDENTIALS_PATH)
+     # Option 1: Paste your Firebase credentials JSON directly
+     FIREBASE_CREDENTIALS={"type":"service_account","project_id":"your-project-id",...rest of credentials}
+     
+     # Option 2: Upload your Firebase credentials file to Railway and provide the path
+     # FIREBASE_CREDENTIALS_PATH=./firebase-credentials.json
+     
      # Cron Security
      CRON_SECRET=your-secure-random-string
-     
-     # Add any Firebase or other configuration variables
      ```
 
 3. **Configure deployment settings**:
@@ -144,6 +149,7 @@ For each WhatsApp Business account:
    - If webhooks aren't working, verify URL and verify token
    - If cron jobs aren't triggering, check environment variables and logs
    - If the application crashes, check the logs for error messages
+   - If Firebase authentication fails, verify your credentials are correct and properly formatted
 
 ## Updating Your Deployment
 

@@ -2,16 +2,16 @@ from flask import Flask
 from flask_cors import CORS
 import os
 from dotenv import load_dotenv
-from flask_sqlalchemy import SQLAlchemy
-from config.settings import Config
+import logging
 
 # Load environment variables
 load_dotenv()
 
-# Initialize SQLAlchemy instance
-db = SQLAlchemy()
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-def create_app(config_class=Config):
+def create_app(config_class=None):
     """Create and configure the Flask application"""
     app = Flask(__name__)
     
@@ -19,14 +19,17 @@ def create_app(config_class=Config):
     CORS(app)
     
     # Load configuration
-    app.config.from_object(config_class)
-    
-    # Initialize extensions
-    db.init_app(app)
+    if config_class:
+        app.config.from_object(config_class)
+    else:
+        # Import config only when needed to avoid circular imports
+        from config.settings import Config
+        app.config.from_object(Config)
     
     # Initialize Firebase
     from config.firebase_config import initialize_firebase
     initialize_firebase()
+    logger.info("Firebase initialized - using Firebase for database operations")
     
     # Import and register blueprints
     from app.routes.webhook import webhook_bp
@@ -38,10 +41,6 @@ def create_app(config_class=Config):
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
     app.register_blueprint(cron_bp, url_prefix='/api')
     app.register_blueprint(health_bp)
-    
-    # Create database tables
-    with app.app_context():
-        db.create_all()
     
     @app.route('/')
     def home():

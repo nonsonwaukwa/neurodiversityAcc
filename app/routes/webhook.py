@@ -6,6 +6,7 @@ from app.models.user import User
 from app.models.checkin import CheckIn
 import json
 import logging
+from datetime import datetime, timedelta
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -13,6 +14,35 @@ logger = logging.getLogger(__name__)
 
 # Create blueprint
 webhook_bp = Blueprint('webhook', __name__)
+
+# Store processed message IDs with timestamps
+processed_messages = {}
+
+def is_message_processed(message_id):
+    """
+    Check if a message has already been processed and clean up old entries
+    
+    Args:
+        message_id (str): The WhatsApp message ID
+        
+    Returns:
+        bool: True if message was already processed, False otherwise
+    """
+    current_time = datetime.now()
+    
+    # Clean up messages older than 1 hour
+    expired = [mid for mid, timestamp in processed_messages.items() 
+              if current_time - timestamp > timedelta(hours=1)]
+    for mid in expired:
+        processed_messages.pop(mid)
+    
+    # Check if message was processed
+    if message_id in processed_messages:
+        return True
+    
+    # Mark message as processed
+    processed_messages[message_id] = current_time
+    return False
 
 @webhook_bp.route('/webhook', methods=['GET', 'POST'])
 def webhook():
@@ -39,6 +69,11 @@ def webhook():
             
             # Process each message
             for message in parsed_data.get('messages', []):
+                # Skip if message was already processed
+                if message.get('id') and is_message_processed(message['id']):
+                    logger.info(f"Skipping duplicate message {message['id']}")
+                    continue
+                
                 process_message(message)
             
             return jsonify({"status": "success"}), 200

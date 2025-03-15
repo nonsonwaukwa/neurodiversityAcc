@@ -6,7 +6,6 @@ from app.models.user import User
 from app.models.checkin import CheckIn
 import json
 import logging
-import os
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -22,29 +21,11 @@ def webhook():
     whatsapp_service = get_whatsapp_service(0)
     
     if request.method == 'GET':
-        # Enhanced logging for webhook verification
-        mode = request.args.get('hub.mode')
-        token = request.args.get('hub.verify_token')
-        challenge = request.args.get('hub.challenge')
-        expected_token = os.environ.get('WHATSAPP_VERIFY_TOKEN')
-        
-        logger.info(f"Webhook verification request received")
-        logger.info(f"hub.mode: {mode}")
-        logger.info(f"hub.verify_token (received): {token}")
-        logger.info(f"Expected verify token from env: {expected_token}")
-        logger.info(f"hub.challenge: {challenge}")
-        
-        # Handle verification request - try the environment variable first
-        if mode == 'subscribe' and token == expected_token and expected_token is not None:
-            logger.info("Webhook verification successful using environment variable token")
-            return challenge
-        # Fallback to hardcoded token for debugging
-        elif mode == 'subscribe' and token == 'odinma_accountability_webhook':
-            logger.info("Webhook verification successful using hardcoded token")
+        # Handle verification request
+        challenge = whatsapp_service.verify_webhook(request.args)
+        if challenge:
             return challenge
         else:
-            logger.error(f"Webhook verification failed. Token match with env var: {token == expected_token}")
-            logger.error(f"Token match with hardcoded: {token == 'odinma_accountability_webhook'}")
             return jsonify({"error": "Verification failed"}), 403
     
     elif request.method == 'POST':
@@ -65,19 +46,6 @@ def webhook():
         except Exception as e:
             logger.error(f"Error processing webhook: {e}")
             return jsonify({"error": str(e)}), 500
-
-@webhook_bp.route('/test-verify-token', methods=['GET'])
-def test_verify_token():
-    """Test route to check if the webhook verify token is accessible"""
-    # Get the token from environment
-    token = os.environ.get('WHATSAPP_VERIFY_TOKEN')
-    # Return details about the token
-    return jsonify({
-        "token_exists": token is not None,
-        "token_length": len(token) if token else 0,
-        "token_first_char": token[0] if token else None,
-        "token_last_char": token[-1] if token else None
-    })
 
 def process_message(message):
     """

@@ -15,7 +15,7 @@ A WhatsApp-based accountability system designed to help neurodivergent individua
 
 - **Backend**: Flask-based API
 - **Messaging**: WhatsApp Business API integration (supports multiple accounts)
-- **Database**: SQLAlchemy with SQLite (configurable for other databases)
+- **Database**: Firebase Firestore for storing user data, tasks, and check-ins
 - **Scheduling**: Standalone cron scripts for Railway deployment
 - **Authentication**: Secure endpoints with token-based authentication
 
@@ -24,8 +24,17 @@ A WhatsApp-based accountability system designed to help neurodivergent individua
 ### Prerequisites
 
 1. Two WhatsApp Business API accounts set up through the Meta Developer Portal
-2. A Railway account for deployment
-3. Git for version control
+2. A Firebase project with Firestore database
+3. A Railway account for deployment
+4. Git for version control
+
+### Firebase Setup
+
+1. Create a Firebase project at [https://console.firebase.google.com/](https://console.firebase.google.com/)
+2. Set up Firestore Database in your project
+3. Go to Project Settings > Service Accounts
+4. Click "Generate new private key" to download the Firebase credentials JSON file
+5. You'll use this file for local development and deployment
 
 ### Local Development Setup
 
@@ -49,10 +58,15 @@ A WhatsApp-based accountability system designed to help neurodivergent individua
 
 4. Modify the `.env` file with your own values, including:
    - WhatsApp API credentials for both accounts
-   - Firebase configuration (if needed)
+   - Firebase configuration (either path to credentials file or the JSON content)
    - Security keys and tokens
 
-5. Run the application:
+5. Test your Firebase connection:
+   ```bash
+   python firebase_test.py
+   ```
+
+6. Run the application:
    ```bash
    flask run
    ```
@@ -80,7 +94,7 @@ A WhatsApp-based accountability system designed to help neurodivergent individua
    - `WHATSAPP_PHONE_NUMBER_ID_2=your-second-account-id`
    - `WHATSAPP_ACCESS_TOKEN_2=your-second-account-token`
    - `CRON_SECRET=your-secure-random-string`
-   - Additional Firebase or database variables as needed
+   - `FIREBASE_CREDENTIALS=your-firebase-credentials-json` (paste the entire JSON)
 
 5. Set the following deployment settings:
    - Build Command: `pip install -r requirements.txt`
@@ -164,6 +178,11 @@ For each cron job, create a separate Railway service:
   - Verify environment variables are correctly set in Railway
   - Check Railway logs for any execution errors
   - Ensure the cron expression format is correct
+
+- **Firebase Connection Issues**:
+  - Check that the FIREBASE_CREDENTIALS environment variable contains valid JSON
+  - Verify that the service account has the correct permissions
+  - For local testing, ensure the credentials file exists at the specified path
 
 ## Contributing
 

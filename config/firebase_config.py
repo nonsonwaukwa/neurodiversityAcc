@@ -27,7 +27,7 @@ def initialize_firebase():
         cred = credentials.Certificate(cred_dict)
     else:
         # If credentials are in a file
-        cred_path = os.environ.get('FIREBASE_CREDENTIALS_PATH', './firebase-credentials.json')
+        cred_path = os.environ.get('FIREBASE_CREDENTIALS_PATH', './config/firebase-credentials.json')
         if os.path.exists(cred_path):
             cred = credentials.Certificate(cred_path)
         else:

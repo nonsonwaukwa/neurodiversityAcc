@@ -13,8 +13,7 @@ class Task:
     STATUS_DONE = 'done'
     STATUS_STUCK = 'stuck'
     
-    def __init__(self, task_id=None, user_id=None, description=None, status=None, 
-                 scheduled_date=None, created_at=None, updated_at=None):
+    def __init__(self, task_id, user_id, description, status=STATUS_PENDING, created_at=None, scheduled_date=None):
         """
         Initialize a task
         
@@ -23,17 +22,15 @@ class Task:
             user_id (str): The user's WhatsApp number
             description (str): Task description
             status (str): Task status (pending, in_progress, done, stuck)
-            scheduled_date (datetime): Date the task is scheduled for
             created_at (datetime): When the task was created
-            updated_at (datetime): When the task was last updated
+            scheduled_date (datetime): Date the task is scheduled for
         """
-        self.task_id = task_id or str(uuid.uuid4())
+        self.task_id = task_id
         self.user_id = user_id
         self.description = description
-        self.status = status or self.STATUS_PENDING
-        self.scheduled_date = scheduled_date
+        self.status = status
         self.created_at = created_at or datetime.now()
-        self.updated_at = updated_at or datetime.now()
+        self.scheduled_date = scheduled_date  # For weekly planning, tasks can be scheduled for specific days
     
     def to_dict(self):
         """Convert the task to a dictionary"""
@@ -42,58 +39,56 @@ class Task:
             'user_id': self.user_id,
             'description': self.description,
             'status': self.status,
-            'scheduled_date': self.scheduled_date,
             'created_at': self.created_at,
-            'updated_at': self.updated_at
+            'scheduled_date': self.scheduled_date
         }
     
     @classmethod
-    def from_dict(cls, data):
-        """Create a task from a dictionary"""
-        return cls(
-            task_id=data.get('task_id'),
-            user_id=data.get('user_id'),
-            description=data.get('description'),
-            status=data.get('status'),
-            scheduled_date=data.get('scheduled_date'),
-            created_at=data.get('created_at'),
-            updated_at=data.get('updated_at')
-        )
-    
-    @classmethod
-    def create(cls, user_id, description, scheduled_date=None):
+    def create(cls, user_id, description, status=STATUS_PENDING, scheduled_date=None):
         """
         Create a new task
         
         Args:
-            user_id (str): The user's WhatsApp number
+            user_id (str): User ID
             description (str): Task description
-            scheduled_date (datetime, optional): Date the task is scheduled for
+            status (str, optional): Task status. Defaults to STATUS_PENDING.
+            scheduled_date (datetime, optional): Date when the task is scheduled. Defaults to None.
             
         Returns:
             Task: The created task
         """
+        # Generate a unique ID
+        task_id = str(uuid.uuid4())
+        
+        # Create task data
+        task_data = {
+            'user_id': user_id,
+            'description': description,
+            'status': status,
+            'created_at': firestore.SERVER_TIMESTAMP
+        }
+        
+        # Add scheduled date if provided
+        if scheduled_date:
+            # Convert to date string for storage
+            scheduled_date_str = scheduled_date.strftime('%Y-%m-%d')
+            task_data['scheduled_date'] = scheduled_date_str
+        
+        # Save to Firestore
         db = get_db()
+        db.collection('tasks').document(task_id).set(task_data)
         
-        # Create task object
-        task = cls(
-            user_id=user_id,
-            description=description,
-            scheduled_date=scheduled_date
-        )
-        
-        # Save to database
-        db.collection('tasks').document(task.task_id).set(task.to_dict())
-        
-        return task
+        # Return task object
+        created_at = datetime.now()  # Use current time as an approximation until the server timestamp is available
+        return cls(task_id, user_id, description, status, created_at, scheduled_date)
     
-    @classmethod
-    def get(cls, task_id):
+    @staticmethod
+    def get(task_id):
         """
         Get a task by ID
         
         Args:
-            task_id (str): The task ID
+            task_id (str): Task ID
             
         Returns:
             Task: The task, or None if not found
@@ -101,40 +96,83 @@ class Task:
         db = get_db()
         doc = db.collection('tasks').document(task_id).get()
         
-        if doc.exists:
-            return cls.from_dict(doc.to_dict())
+        if not doc.exists:
+            return None
         
-        return None
+        data = doc.to_dict()
+        user_id = data.get('user_id')
+        description = data.get('description')
+        status = data.get('status')
+        created_at = data.get('created_at')
+        
+        # Convert created_at timestamp
+        if created_at:
+            created_at = created_at.datetime
+        
+        # Parse scheduled date if available
+        scheduled_date = None
+        if 'scheduled_date' in data:
+            try:
+                scheduled_date = datetime.strptime(data['scheduled_date'], '%Y-%m-%d')
+            except ValueError:
+                pass
+        
+        return Task(task_id, user_id, description, status, created_at, scheduled_date)
     
-    @classmethod
-    def get_for_user(cls, user_id, status=None, scheduled_date=None):
+    @staticmethod
+    def get_for_user(user_id, status=None, scheduled_date=None):
         """
-        Get tasks for a specific user
+        Get tasks for a user
         
         Args:
-            user_id (str): The user's WhatsApp number
-            status (str, optional): Filter by status
-            scheduled_date (datetime, optional): Filter by scheduled date
+            user_id (str): User ID
+            status (str, optional): Filter by task status. Defaults to None.
+            scheduled_date (datetime, optional): Filter by scheduled date. Defaults to None.
             
         Returns:
-            list: List of tasks
+            list: List of Task objects
         """
         db = get_db()
         query = db.collection('tasks').where('user_id', '==', user_id)
         
+        # Apply status filter if provided
         if status:
             query = query.where('status', '==', status)
         
+        # Apply scheduled date filter if provided
         if scheduled_date:
-            # Convert to datetime with time set to 00:00:00
-            if isinstance(scheduled_date, datetime):
-                start_date = datetime(scheduled_date.year, scheduled_date.month, scheduled_date.day)
-                end_date = datetime(scheduled_date.year, scheduled_date.month, scheduled_date.day, 23, 59, 59)
-                query = query.where('scheduled_date', '>=', start_date).where('scheduled_date', '<=', end_date)
+            # Convert to date string for comparison
+            date_str = scheduled_date.strftime('%Y-%m-%d')
+            query = query.where('scheduled_date', '==', date_str)
+        
+        # Execute query
+        results = query.stream()
         
         tasks = []
-        for doc in query.stream():
-            tasks.append(cls.from_dict(doc.to_dict()))
+        for doc in results:
+            task_id = doc.id
+            data = doc.to_dict()
+            description = data.get('description')
+            task_status = data.get('status')
+            created_at = data.get('created_at')
+            
+            # Convert created_at timestamp
+            if created_at:
+                created_at = created_at.datetime
+            
+            # Parse scheduled date if available
+            task_scheduled_date = None
+            if 'scheduled_date' in data:
+                try:
+                    task_scheduled_date = datetime.strptime(data['scheduled_date'], '%Y-%m-%d')
+                except ValueError:
+                    pass
+            
+            task = Task(task_id, user_id, description, task_status, created_at, task_scheduled_date)
+            tasks.append(task)
+        
+        # Sort by creation time (newest first)
+        tasks.sort(key=lambda t: t.created_at if t.created_at else datetime.min, reverse=True)
         
         return tasks
     

@@ -13,13 +13,38 @@ class TaskService:
     
     def __init__(self):
         """Initialize the task service"""
-        self.adhd_hacks = current_app.config.get('ADHD_HACKS', [
-            "Break the task into smaller, manageable chunks",
-            "Set a timer for 25 minutes and focus only on this task",
-            "Remove distractions from your environment",
-            "Try the 'body doubling' technique - work alongside someone else",
-            "Take a 5-minute break to move around"
-        ])
+        # ADHD-friendly productivity hacks
+        self.adhd_hacks = [
+            "Break your task into smaller, more manageable steps.",
+            "Use the Pomodoro Technique: 25 minutes of focus, then a 5-minute break.",
+            "Remove distractions from your environment before starting.",
+            "Create a clear, written checklist for your task.",
+            "Set a timer for just 5 minutes - often getting started is the hardest part.",
+            "Try body doubling: work alongside someone else (virtually or in person).",
+            "Use the 'if-then' planning technique: 'If [situation], then I will [action]'.",
+            "Play background music or white noise to help with focus.",
+            "Set up visual reminders where you'll notice them.",
+            "Reward yourself after completing parts of your task."
+        ]
+        
+        # Self-care tips for rest days
+        self.self_care_tips = [
+            "Take a short walk outside to get fresh air and sunlight.",
+            "Practice deep breathing for 5 minutes.",
+            "Stay hydrated - drink a glass of water now.",
+            "Stretch your body gently for a few minutes.",
+            "Listen to music that makes you feel good.",
+            "Write down three things you're grateful for today.",
+            "Connect with a friend or loved one, even just for a quick chat.",
+            "Take a warm shower or bath.",
+            "Eat a nutritious meal or snack.",
+            "Spend some time in nature, even if just sitting by a window.",
+            "Try a simple meditation or mindfulness exercise.",
+            "Give yourself permission to take a short nap.",
+            "Read something purely for enjoyment.",
+            "Do a small creative activity with no pressure to be 'good' at it.",
+            "Declutter one small area of your space."
+        ]
     
     def create_task(self, user_id, description):
         """
@@ -77,15 +102,16 @@ class TaskService:
     
     def get_adhd_hack(self):
         """
-        Get a random ADHD-friendly hack
+        Get a random ADHD-friendly productivity hack
         
         Returns:
             str: An ADHD-friendly strategy
         """
-        if not self.adhd_hacks:
-            return "Break your task into smaller steps."
-        
         return random.choice(self.adhd_hacks)
+    
+    def get_self_care_tip(self):
+        """Get a random self-care tip for rest days"""
+        return random.choice(self.self_care_tips)
     
     def parse_task_update(self, message_text):
         """

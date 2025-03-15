@@ -2,11 +2,14 @@ from flask import Blueprint, request, jsonify
 from app.services.whatsapp import get_whatsapp_service, get_whatsapp_service_for_number
 from app.services.sentiment import get_sentiment_service
 from app.services.tasks import get_task_service, send_task_buttons
+from app.services.validation import ResponseValidator
+from app.services.voice import VoiceTranscriptionService
 from app.models.user import User
 from app.models.checkin import CheckIn
 from app.models.task import Task
-from app.cron.daily_checkin import process_daily_response, handle_one_task_request, handle_rest_request
+from app.cron.daily_checkin import process_daily_response, handle_one_task_request, handle_rest_request, handle_choose_one_task, handle_task_selection
 from app.cron.weekly_checkin import process_weekly_response
+from app.cron.weekly_report import process_win_reflection
 import json
 import logging
 from datetime import datetime, timedelta
@@ -17,6 +20,10 @@ logger = logging.getLogger(__name__)
 
 # Create blueprint
 webhook_bp = Blueprint('webhook', __name__)
+
+# Initialize services
+validator = ResponseValidator()
+voice_service = VoiceTranscriptionService()
 
 # Store processed message IDs with timestamps
 processed_messages = {}
@@ -117,40 +124,80 @@ def process_message(message):
     # Update user's last active timestamp
     user.update_last_active()
     
-    # Process based on message type
+    # Get text content based on message type
+    text = None
     if message_type == 'text':
         text = message.get('text', '')
+    elif message_type == 'voice':
+        # Process voice note
+        audio_url = message.get('voice_url')
+        if audio_url:
+            text = voice_service.process_voice_note(audio_url)
+            if not text:
+                whatsapp_service.send_message(
+                    from_number,
+                    "I couldn't understand your voice note. Could you please type your response or try recording again?"
+                )
+                return
+            logger.info(f"Transcribed voice note: {text}")
+    
+    if not text:
+        return
+    
+    # Analyze sentiment
+    sentiment_score = sentiment_service.analyze(text)
+    
+    # Determine if this is a response to a check-in
+    recent_checkins = CheckIn.get_for_user(from_number, limit=1)
+    
+    # Store the message as a check-in
+    checkin = CheckIn.create(from_number, text, CheckIn.TYPE_DAILY, sentiment_score)
+    
+    # Update user's sentiment history
+    user.add_sentiment_score(sentiment_score)
+    
+    # Process based on recent check-in context
+    if recent_checkins:
+        last_checkin = recent_checkins[0]
         
-        # Analyze sentiment
-        sentiment_score = sentiment_service.analyze(text)
-        
-        # Determine if this is a response to a check-in
-        recent_checkins = CheckIn.get_for_user(from_number, limit=1)
-        
-        # Store the message as a check-in
-        checkin = CheckIn.create(from_number, text, CheckIn.TYPE_DAILY, sentiment_score)
-        
-        # Update user's sentiment history
-        user.add_sentiment_score(sentiment_score)
-        
-        # If this is a response to a weekly check-in
-        if recent_checkins and recent_checkins[0].message == "Hey {name}, let's check in! How are you feeling about the upcoming week?":
-            # Process as weekly check-in response
+        # Check if this is a response to a compassion check-in
+        if "This week may have been tough, and that's okay" in last_checkin.response or "A Moment for Self-Compassion" in last_checkin.response:
+            # Process as win reflection
+            response = process_win_reflection(user.user_id, text)
+            whatsapp_service.send_message(from_number, response)
+            logger.info(f"Processed win reflection from {from_number}")
+            return
+            
+        # Weekly check-in response
+        if "How are you feeling about the upcoming week?" in last_checkin.response:
+            is_valid, feedback = validator.validate_feeling_response(text)
+            if not is_valid:
+                whatsapp_service.send_message(from_number, feedback)
+                return
             process_weekly_response(user, text, sentiment_score)
         
-        # If this is a response to a daily check-in
-        elif recent_checkins and recent_checkins[0].message == "Good morning {name}! How are you feeling today?":
-            # Process as daily check-in response
+        # Daily check-in response
+        elif "How are you feeling today?" in last_checkin.response:
+            is_valid, feedback = validator.validate_feeling_response(text)
+            if not is_valid:
+                whatsapp_service.send_message(from_number, feedback)
+                return
             process_daily_response(user, text, sentiment_score)
         
-        # If this is a response to a task request
-        elif recent_checkins and "What tasks would you like to focus on today?" in recent_checkins[0].message:
-            # Parse tasks from the message
+        # Task list response
+        elif "What tasks would you like to focus on today?" in last_checkin.response:
+            is_valid, feedback = validator.validate_task_response(text)
+            if not is_valid:
+                whatsapp_service.send_message(from_number, feedback)
+                return
             process_task_list(user, text)
         
-        # If this is a response to a one task request
-        elif recent_checkins and "What's one small thing you'd like to accomplish today?" in recent_checkins[0].message:
-            # Create a single task
+        # Single task response
+        elif "What's one small thing you'd like to accomplish today?" in last_checkin.response:
+            is_valid, feedback = validator.validate_task_response(text)
+            if not is_valid:
+                whatsapp_service.send_message(from_number, feedback)
+                return
             Task.create(user.user_id, text)
             whatsapp_service.send_message(
                 from_number, 
@@ -173,7 +220,7 @@ def process_message(message):
                 response = "Great to hear you're doing well! What tasks would you like to accomplish today?"
                 whatsapp_service.send_message(from_number, response)
         
-        logger.info(f"Processed text message from {from_number} with sentiment {sentiment_score}")
+        logger.info(f"Processed message from {from_number} with sentiment {sentiment_score}")
     
     elif message_type == 'interactive':
         # Handle button responses
@@ -210,6 +257,14 @@ def process_message(message):
             
             elif button_id == 'one_task':
                 handle_one_task_request(user)
+            
+            elif button_id == 'choose_one_task':
+                handle_choose_one_task(user)
+            
+            elif button_id.startswith('select_task_'):
+                # Handle selecting a specific task to focus on
+                task_id = button_id.replace('select_task_', '')
+                handle_task_selection(user, task_id)
             
             logger.info(f"Processed interactive message from {from_number} with button {button_id}")
     

@@ -1,35 +1,27 @@
-import torch
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
-import random
 import os
+import json
+import requests
+import random
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 class SentimentAnalysisService:
-    """Service for analyzing sentiment of user messages using DeepSeek or transformers model"""
+    """Service for analyzing sentiment of user messages using DeepSeek API"""
     
     def __init__(self):
         """Initialize the sentiment analysis service"""
-        self.model = None
-        self.tokenizer = None
-        self._load_model()
-    
-    def _load_model(self):
-        """Load the sentiment analysis model"""
-        try:
-            # Try to use a pre-trained model for sentiment analysis
-            # For simplicity, we're using a basic sentiment model from Hugging Face
-            model_name = "distilbert-base-uncased-finetuned-sst-2-english"
-            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-            self.model = AutoModelForSequenceClassification.from_pretrained(model_name)
-            print("Sentiment analysis model loaded successfully")
-        except Exception as e:
-            print(f"Error loading sentiment analysis model: {e}")
+        self.api_key = os.environ.get('DEEPSEEK_API_KEY')
+        self.api_url = "https://api.deepseek.com/v1/sentiment"  # Replace with actual DeepSeek API endpoint
+        
+        if not self.api_key:
+            print("WARNING: DEEPSEEK_API_KEY not found in environment variables!")
             print("Using mock sentiment analysis for development")
-            self.model = None
-            self.tokenizer = None
     
     def analyze(self, text):
         """
-        Analyze the sentiment of a text
+        Analyze the sentiment of a text using DeepSeek API
         
         Args:
             text (str): The text to analyze
@@ -37,36 +29,50 @@ class SentimentAnalysisService:
         Returns:
             float: A sentiment score between -1 (negative) and 1 (positive)
         """
-        if self.model is None or self.tokenizer is None:
-            # If model loading failed, use mock analysis
+        if not self.api_key or not text:
             return self._mock_analyze(text)
         
         try:
-            # Tokenize and prepare for model
-            inputs = self.tokenizer(text, return_tensors="pt", truncation=True, padding=True)
+            # Prepare request to DeepSeek API
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
             
-            # Get model outputs
-            with torch.no_grad():
-                outputs = self.model(**inputs)
+            payload = {
+                "text": text,
+                "model": "sentiment-analysis"  # Adjust based on DeepSeek's model naming
+            }
             
-            # Convert logits to probabilities
-            probs = torch.nn.functional.softmax(outputs.logits, dim=-1)
+            # Make API request
+            response = requests.post(
+                self.api_url,
+                headers=headers,
+                json=payload,
+                timeout=10
+            )
             
-            # Get positive probability (assuming binary classification: [neg, pos])
-            positive_prob = probs[0][1].item()
-            
-            # Convert to -1 to 1 scale
-            sentiment_score = (positive_prob * 2) - 1
-            
-            return sentiment_score
-        
+            # Check if request was successful
+            if response.status_code == 200:
+                result = response.json()
+                
+                # Extract sentiment score from response
+                # Note: Adjust based on actual DeepSeek API response format
+                sentiment_score = result.get("sentiment_score", 0)
+                
+                # Ensure score is between -1 and 1
+                return max(-1, min(1, sentiment_score))
+            else:
+                print(f"DeepSeek API error: {response.status_code} - {response.text}")
+                return self._mock_analyze(text)
+                
         except Exception as e:
-            print(f"Error during sentiment analysis: {e}")
+            print(f"Error during DeepSeek sentiment analysis: {str(e)}")
             return self._mock_analyze(text)
     
     def _mock_analyze(self, text):
         """
-        Mock sentiment analysis for development or when the model is unavailable
+        Mock sentiment analysis for development or when the API is unavailable
         
         Args:
             text (str): The text to analyze
@@ -82,7 +88,7 @@ class SentimentAnalysisService:
                          "hate", "negative", "stressed", "anxious", "worried", "overwhelmed", "struggling"]
         
         # Convert to lowercase for comparison
-        text_lower = text.lower()
+        text_lower = text.lower() if text else ""
         
         # Count occurrences of positive and negative words
         positive_count = sum(1 for word in positive_words if word in text_lower)

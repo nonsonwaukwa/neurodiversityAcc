@@ -13,7 +13,7 @@ class SentimentAnalysisService:
     def __init__(self):
         """Initialize the sentiment analysis service"""
         self.api_key = os.environ.get('DEEPSEEK_API_KEY')
-        self.api_url = "https://api.deepseek.com/v1/sentiment"  # Replace with actual DeepSeek API endpoint
+        self.api_url = "https://api.deepseek.com/chat/completions"
         
         if not self.api_key:
             print("WARNING: DEEPSEEK_API_KEY not found in environment variables!")
@@ -39,9 +39,23 @@ class SentimentAnalysisService:
                 "Content-Type": "application/json"
             }
             
+            # Prepare the prompt for sentiment analysis
+            messages = [
+                {
+                    "role": "system",
+                    "content": "You are a sentiment analysis assistant. Analyze the sentiment of the given text and respond with a single number between -1 (most negative) and 1 (most positive). Only respond with the number, no other text."
+                },
+                {
+                    "role": "user",
+                    "content": text
+                }
+            ]
+            
             payload = {
-                "text": text,
-                "model": "sentiment-analysis"  # Adjust based on DeepSeek's model naming
+                "model": "deepseek-chat",
+                "messages": messages,
+                "temperature": 0.1,  # Low temperature for consistent results
+                "stream": False
             }
             
             # Make API request
@@ -55,13 +69,16 @@ class SentimentAnalysisService:
             # Check if request was successful
             if response.status_code == 200:
                 result = response.json()
+                sentiment_text = result['choices'][0]['message']['content'].strip()
                 
-                # Extract sentiment score from response
-                # Note: Adjust based on actual DeepSeek API response format
-                sentiment_score = result.get("sentiment_score", 0)
-                
-                # Ensure score is between -1 and 1
-                return max(-1, min(1, sentiment_score))
+                try:
+                    # Convert the response to a float
+                    sentiment_score = float(sentiment_text)
+                    # Ensure the score is between -1 and 1
+                    return max(-1, min(1, sentiment_score))
+                except (ValueError, TypeError):
+                    print(f"Error parsing sentiment score: {sentiment_text}")
+                    return self._mock_analyze(text)
             else:
                 print(f"DeepSeek API error: {response.status_code} - {response.text}")
                 return self._mock_analyze(text)

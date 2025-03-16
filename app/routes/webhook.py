@@ -21,6 +21,7 @@ def whatsapp_webhook():
     """Handle incoming WhatsApp messages and webhook verification"""
     logger.info("Webhook endpoint hit")
     logger.info(f"Request method: {request.method}")
+    logger.info(f"Request args: {request.args}")
     
     if request.method == 'GET':
         # Handle webhook verification
@@ -30,26 +31,33 @@ def whatsapp_webhook():
         
         logger.info(f"Verification request: mode={mode}, token={token}, challenge={challenge}")
         
-        if mode == 'subscribe' and token == VERIFY_TOKEN:
-            logger.info("Webhook verified successfully")
-            return challenge, 200
+        # If this is a verification request
+        if mode and token:
+            if mode == 'subscribe' and token == VERIFY_TOKEN:
+                logger.info("Webhook verified successfully")
+                return challenge, 200
+            else:
+                logger.error(f"Webhook verification failed. Expected token: {VERIFY_TOKEN}, Received token: {token}")
+                return 'Invalid verification token', 403
         else:
-            logger.error(f"Webhook verification failed. Expected token: {VERIFY_TOKEN}, Received token: {token}")
-            return 'Invalid verification token', 403
+            # This is a regular GET request, not a verification
+            logger.info("Regular GET request received (not a verification request)")
+            return jsonify({"status": "success", "message": "Webhook is active"}), 200
 
     # Handle POST requests (actual messages)
     try:
         # Log raw request data
         logger.info(f"Request headers: {dict(request.headers)}")
-        logger.info(f"Request data: {request.get_data(as_text=True)}")
+        raw_data = request.get_data(as_text=True)
+        logger.info(f"Raw request data: {raw_data}")
         
         # Get message data
         data = request.get_json()
         logger.info(f"Parsed JSON data: {data}")
         
         # Extract message details
-        entry = data.get('entry', [{}])[0]
-        changes = entry.get('changes', [{}])[0]
+        entry = data.get('entry', [{}])[0] if data and 'entry' in data else {}
+        changes = entry.get('changes', [{}])[0] if entry and 'changes' in entry else {}
         value = changes.get('value', {})
         messages = value.get('messages', [])
         

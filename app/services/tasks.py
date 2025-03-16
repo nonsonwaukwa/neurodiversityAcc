@@ -102,21 +102,22 @@ class TaskService:
         """
         return Task.get_for_user(user_id, status, limit)
     
-    def get_adhd_hack(self, user_id=None, task_description=None):
+    def get_adhd_hack(self, user_id=None, task_description=None, exclude_hacks=None):
         """
         Get a productivity hack for a user, personalized if possible
         
         Args:
             user_id (str, optional): The user's ID for personalization
             task_description (str, optional): The task description for context
+            exclude_hacks (list, optional): List of hacks to exclude
             
         Returns:
-            str: A productivity strategy
-            bool: Whether it's personalized
+            tuple: (str, bool) - (hack, is_personalized)
         """
         # If we don't have user ID or task description, return a generic hack
         if not user_id or not task_description:
-            return random.choice(self.adhd_hacks), False
+            available_hacks = [h for h in self.adhd_hacks if not exclude_hacks or h not in exclude_hacks]
+            return random.choice(available_hacks if available_hacks else self.adhd_hacks), False
         
         # Extract keywords from task description
         keywords = self._extract_keywords(task_description)
@@ -130,16 +131,21 @@ class TaskService:
                 limit=2
             )
             
+            # Filter out excluded hacks
+            if exclude_hacks:
+                personalized_strategies = [s for s in personalized_strategies if s.content not in exclude_hacks]
+            
             # If we found personalized strategies, return one
             if personalized_strategies:
                 # Add prefix to make it clear this is based on their past success
-                strategy = f"Based on what's worked for you before: {personalized_strategies[0].content}"
+                strategy = personalized_strategies[0].content
                 return strategy, True
         except Exception as e:
             logger.error(f"Error getting personalized strategies: {e}")
         
         # If no personalized strategies or an error occurred, fall back to general strategies
-        return random.choice(self.adhd_hacks), False
+        available_hacks = [h for h in self.adhd_hacks if not exclude_hacks or h not in exclude_hacks]
+        return random.choice(available_hacks if available_hacks else self.adhd_hacks), False
     
     def _extract_keywords(self, text):
         """
@@ -503,6 +509,49 @@ class TaskService:
         except Exception as e:
             logger.error(f"Error getting personalized suggestions: {e}")
             return {}
+
+    def log_successful_strategy(self, user_id, task_id, strategy, task_description):
+        """
+        Log a strategy that successfully helped a user
+        
+        Args:
+            user_id (str): The user's ID
+            task_id (str): The task ID
+            strategy (str): The successful strategy
+            task_description (str): The task description for context
+            
+        Returns:
+            bool: Success status
+        """
+        try:
+            # Extract task themes/keywords
+            keywords = self._extract_keywords(task_description)
+            
+            # Store the successful strategy
+            UserInsight.create(
+                user_id=user_id,
+                content=strategy,
+                insight_type=UserInsight.TYPE_STRATEGY,
+                task_id=task_id,
+                task_description=task_description,
+                tags=['successful-strategy'] + keywords
+            )
+            
+            # Log analytics
+            analytics_service = get_analytics_service()
+            if analytics_service:
+                analytics_service.log_strategy_success(
+                    user_id=user_id,
+                    task_id=task_id,
+                    strategy=strategy,
+                    task_description=task_description
+                )
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error logging successful strategy: {e}")
+            return False
 
 # Create singleton instance
 _task_service = None

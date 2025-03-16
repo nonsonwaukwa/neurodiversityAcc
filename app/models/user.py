@@ -8,7 +8,8 @@ class User:
     """User model for the accountability system"""
     
     def __init__(self, user_id, name, role='user', account_index=0, planning_type='daily',
-                 last_active=None, sentiment_history=None, task_needs_followup=None):
+                 last_active=None, sentiment_history=None, task_needs_followup=None,
+                 streak_count=0, last_streak_date=None):
         """
         Initialize a user
         
@@ -21,6 +22,8 @@ class User:
             last_active (datetime): When the user was last active
             sentiment_history (list): History of sentiment scores
             task_needs_followup (str): Task ID that needs a follow-up (when user is stuck)
+            streak_count (int): Current streak of consecutive days with activity
+            last_streak_date (datetime): Last date the streak was updated
         """
         self.user_id = user_id
         self.name = name
@@ -30,6 +33,8 @@ class User:
         self.last_active = last_active or datetime.now()
         self.sentiment_history = sentiment_history or []
         self.task_needs_followup = task_needs_followup
+        self.streak_count = streak_count
+        self.last_streak_date = last_streak_date
     
     def to_dict(self):
         """Convert the user to a dictionary"""
@@ -41,7 +46,9 @@ class User:
             'planning_type': self.planning_type,
             'last_active': self.last_active,
             'sentiment_history': self.sentiment_history,
-            'task_needs_followup': self.task_needs_followup
+            'task_needs_followup': self.task_needs_followup,
+            'streak_count': self.streak_count,
+            'last_streak_date': self.last_streak_date
         }
     
     @classmethod
@@ -55,7 +62,9 @@ class User:
             planning_type=data.get('planning_type', 'daily'),
             last_active=data.get('last_active'),
             sentiment_history=data.get('sentiment_history', []),
-            task_needs_followup=data.get('task_needs_followup')
+            task_needs_followup=data.get('task_needs_followup'),
+            streak_count=data.get('streak_count', 0),
+            last_streak_date=data.get('last_streak_date')
         )
     
     @classmethod

@@ -1,0 +1,20 @@
+{
+  "hosting": {
+    "public": "public",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "function": "app_handler"
+      }
+    ]
+  },
+  "functions": {
+    "source": "neurodiversity-acc-functions",
+    "runtime": "python312"
+  }
+}

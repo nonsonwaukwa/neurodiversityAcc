@@ -74,17 +74,17 @@ def _send_user_progress_report(user, whatsapp_service, progress_service):
     
     # Send appropriate message based on report type
     if report['type'] == 'success':
-        # Success report - send as message
+        # Success report - celebrate achievements
         whatsapp_service.send_message(user.user_id, report['message'])
         
         # Create check-in record
         CheckIn.create(
             user.user_id, 
-            "Weekly Progress Report sent", 
+            "Weekly Celebration sent", 
             CheckIn.TYPE_WEEKLY
         )
         
-        logger.info(f"Sent success progress report to user {user.user_id}")
+        logger.info(f"Sent achievement celebration to user {user.user_id}")
         
     elif report['type'] == 'compassion':
         # Compassionate check-in for users who struggled
@@ -101,7 +101,7 @@ def _send_user_progress_report(user, whatsapp_service, progress_service):
 
 def process_win_reflection(user_id, reflection_text):
     """
-    Process a user's reflection on their small win for the week
+    Process a user's reflection on their strategies or small wins
     
     Args:
         user_id (str): The user's ID
@@ -113,7 +113,7 @@ def process_win_reflection(user_id, reflection_text):
     try:
         user = User.get(user_id)
         if not user:
-            logger.error(f"User {user_id} not found for win reflection")
+            logger.error(f"User {user_id} not found for strategy reflection")
             return "Thank you for sharing!"
         
         progress_service = get_progress_service()
@@ -122,12 +122,12 @@ def process_win_reflection(user_id, reflection_text):
         # Create check-in record for the reflection
         CheckIn.create(
             user.user_id, 
-            f"Win reflection: {reflection_text}", 
+            f"Strategy reflection: {reflection_text}", 
             CheckIn.TYPE_WEEKLY
         )
         
         return response
     except Exception as e:
-        logger.error(f"Error processing win reflection: {e}")
+        logger.error(f"Error processing strategy reflection: {e}")
         logger.debug(traceback.format_exc())
-        return "Thank you for sharing! Your reflection means a lot." 
+        return "Thank you for sharing! Your insights are valuable." 

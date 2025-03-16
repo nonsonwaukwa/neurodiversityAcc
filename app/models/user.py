@@ -8,7 +8,7 @@ class User:
     """User model for the accountability system"""
     
     def __init__(self, user_id, name, role='user', account_index=0, planning_type='daily',
-                 last_active=None, sentiment_history=None):
+                 last_active=None, sentiment_history=None, task_needs_followup=None):
         """
         Initialize a user
         
@@ -20,6 +20,7 @@ class User:
             planning_type (str): The user's planning type (weekly or daily)
             last_active (datetime): When the user was last active
             sentiment_history (list): History of sentiment scores
+            task_needs_followup (str): Task ID that needs a follow-up (when user is stuck)
         """
         self.user_id = user_id
         self.name = name
@@ -28,6 +29,7 @@ class User:
         self.planning_type = planning_type
         self.last_active = last_active or datetime.now()
         self.sentiment_history = sentiment_history or []
+        self.task_needs_followup = task_needs_followup
     
     def to_dict(self):
         """Convert the user to a dictionary"""
@@ -38,7 +40,8 @@ class User:
             'account_index': self.account_index,
             'planning_type': self.planning_type,
             'last_active': self.last_active,
-            'sentiment_history': self.sentiment_history
+            'sentiment_history': self.sentiment_history,
+            'task_needs_followup': self.task_needs_followup
         }
     
     @classmethod
@@ -51,7 +54,8 @@ class User:
             account_index=data.get('account_index', 0),
             planning_type=data.get('planning_type', 'daily'),
             last_active=data.get('last_active'),
-            sentiment_history=data.get('sentiment_history', [])
+            sentiment_history=data.get('sentiment_history', []),
+            task_needs_followup=data.get('task_needs_followup')
         )
     
     @classmethod

@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from app.models.user import User
 from app.models.task import Task
 from app.models.checkin import CheckIn
+from app.models.user_insight import UserInsight
 from app.services.whatsapp import get_whatsapp_service
 from app.services.analytics import get_analytics_service
 import os
@@ -42,9 +43,6 @@ class ProgressReportService:
         
         # Count tasks by status
         completed_tasks = [t for t in all_tasks if t.status == Task.STATUS_DONE]
-        in_progress_tasks = [t for t in all_tasks if t.status == Task.STATUS_IN_PROGRESS]
-        stuck_tasks = [t for t in all_tasks if t.status == Task.STATUS_STUCK]
-        pending_tasks = [t for t in all_tasks if t.status == Task.STATUS_PENDING]
         
         # Get sentiment data
         analytics_service = get_analytics_service()
@@ -52,88 +50,68 @@ class ProgressReportService:
         
         # Check if user had tasks and completed some
         has_completed_tasks = len(completed_tasks) > 0
-        had_any_tasks = len(all_tasks) > 0
         
         # Based on task history, decide which type of report to generate
-        if had_any_tasks and has_completed_tasks:
-            # User has completed tasks - generate visual report
+        if has_completed_tasks:
+            # User has completed tasks - generate celebration report
             return ProgressReportService._generate_success_report(
-                user, completed_tasks, pending_tasks, 
-                in_progress_tasks, stuck_tasks, sentiment_trend
+                user, completed_tasks, sentiment_trend
             )
         else:
-            # User had no tasks or completed none - generate compassionate check-in
+            # User had no completed tasks - generate compassionate check-in
             return ProgressReportService._generate_compassion_checkin(user, sentiment_trend)
     
     @staticmethod
-    def _generate_success_report(user, completed_tasks, pending_tasks, in_progress_tasks, stuck_tasks, sentiment_trend):
+    def _generate_success_report(user, completed_tasks, sentiment_trend):
         """
-        Generate a success report with metrics
+        Generate a success report focusing only on achievements
         
         Args:
             user (User): The user object
             completed_tasks (list): Completed tasks
-            pending_tasks (list): Pending tasks 
-            in_progress_tasks (list): In-progress tasks
-            stuck_tasks (list): Stuck tasks
             sentiment_trend (dict): Sentiment trend data
             
         Returns:
             dict: Report data
         """
-        # Calculate metrics
-        total_tasks = len(completed_tasks) + len(pending_tasks) + len(in_progress_tasks) + len(stuck_tasks)
-        completion_rate = len(completed_tasks) / total_tasks if total_tasks > 0 else 0
-        
-        # Prepare report text
+        # Prepare completed tasks list
         completed_list = "\n".join([f"✅ {task.description}" for task in completed_tasks[:5]])
         if len(completed_tasks) > 5:
             completed_list += f"\n...and {len(completed_tasks) - 5} more"
         
-        # Create report message
-        if completion_rate >= 0.7:  # High completion
-            praise = "Amazing work this week! You completed most of your tasks."
-        elif completion_rate >= 0.4:  # Moderate completion
-            praise = "Good progress this week! You're moving forward."
-        else:  # Lower completion
-            praise = "You made progress this week. Every completed task matters!"
+        # Create celebration message
+        if len(completed_tasks) >= 5:
+            praise = "Amazing work this week! You completed several tasks and should be proud of yourself."
+        elif len(completed_tasks) >= 3:
+            praise = "Great job this week! You made meaningful progress on your goals."
+        else:
+            praise = "Well done! Each task you completed this week is a real achievement."
             
-        # Add sentiment acknowledgment
+        # Add sentiment acknowledgment if positive
+        mood_note = ""
         if sentiment_trend["trend"] == "improving":
             mood_note = "I've noticed your mood improving this week. That's wonderful!"
-        elif sentiment_trend["trend"] == "declining":
-            mood_note = "This week may have had its challenges emotionally. Remember to take care of yourself."
         elif sentiment_trend["trend"] == "positive":
             mood_note = "You've maintained a positive outlook this week. Great job!"
-        else:
-            mood_note = ""
-        
-        # Create a text-based visualization of completion rate
-        progress_bar = ProgressReportService._create_text_progress_bar(completion_rate)
         
         message = (
-            f"📊 *Your Weekly Progress Report*\n\n"
+            f"🎉 *Your Weekly Celebration*\n\n"
             f"{praise}\n\n"
-            f"*Completed tasks:* {len(completed_tasks)}/{total_tasks}\n"
-            f"{progress_bar}\n"
-            f"*In progress:* {len(in_progress_tasks)}\n"
-            f"*Tasks you completed:*\n{completed_list}\n\n"
+            f"*Your achievements this week:*\n{completed_list}\n\n"
         )
         
         if mood_note:
             message += f"{mood_note}\n\n"
             
         message += (
-            f"What's one thing you're proud of accomplishing this week? "
-            f"It doesn't have to be from your task list!"
+            f"What's one strategy or 'hack' that worked well for you this week? "
+            f"Your insight might help your future self when things get challenging!"
         )
         
         return {
             "type": "success",
             "message": message,
-            "completion_rate": completion_rate,
-            "total_tasks": total_tasks,
-            "completed_tasks": len(completed_tasks)
+            "completed_tasks_count": len(completed_tasks)
         }
     
     @staticmethod
@@ -195,7 +173,7 @@ class ProgressReportService:
     @staticmethod
     def process_win_reflection(user, reflection_text):
         """
-        Process a user's reflection on a small win
+        Process a user's reflection on a small win or successful strategy
         
         Args:
             user (User): The user object
@@ -204,23 +182,56 @@ class ProgressReportService:
         Returns:
             str: Response message
         """
-        # Store the reflection
-        # We could add a Reflection model in the future, but for now we'll just log it
+        # Store the reflection as an insight, not just a log
         logger.info(f"WIN_REFLECTION: User {user.user_id} reflected: {reflection_text}")
+        
+        # Identify potential tags based on content
+        tags = []
+        
+        # Check for common strategy categories
+        if any(keyword in reflection_text.lower() for keyword in ['break', 'chunking', 'smaller', 'piece']):
+            tags.append('task-chunking')
+        
+        if any(keyword in reflection_text.lower() for keyword in ['timer', 'pomodoro', 'minutes', '25 min']):
+            tags.append('time-management')
+            
+        if any(keyword in reflection_text.lower() for keyword in ['reward', 'treat', 'celebrate']):
+            tags.append('rewards')
+            
+        if any(keyword in reflection_text.lower() for keyword in ['body double', 'friend', 'together', 'alongside']):
+            tags.append('body-doubling')
+            
+        if any(keyword in reflection_text.lower() for keyword in ['morning', 'afternoon', 'evening', 'time of day']):
+            tags.append('time-of-day')
+            
+        if any(keyword in reflection_text.lower() for keyword in ['focus', 'concentration', 'distraction', 'quiet']):
+            tags.append('focus-environment')
+        
+        # Store as a strategy insight
+        UserInsight.create(
+            user_id=user.user_id,
+            content=reflection_text,
+            insight_type=UserInsight.TYPE_STRATEGY,
+            source='weekly-reflection',
+            effectiveness=None,  # Will be determined later based on usage
+            tags=tags
+        )
         
         # Generate appropriate response
         if len(reflection_text.split()) > 15:  # Longer reflection
             response = (
-                f"Thank you for sharing that, {user.name}. It's wonderful to hear about the positive moments "
-                f"in your week, no matter how small they might seem. Those small wins and moments of joy "
-                f"are important parts of your journey.\n\n"
-                f"I'll check in again next week, and remember - progress isn't always linear, "
-                f"and every small step counts."
+                f"Thank you for sharing that, {user.name}! The strategy you described is "
+                f"really insightful. These personal 'hacks' are often the most valuable tools "
+                f"we develop on our journey. I'll remember what worked for you this week and "
+                f"may suggest it in the future when you face similar challenges.\n\n"
+                f"I look forward to celebrating more of your achievements next week!"
             )
         else:  # Shorter reflection
             response = (
-                f"Thank you for sharing that win, {user.name}. Even small positive moments matter! "
-                f"I hope the coming week brings more moments like this."
+                f"Thanks for sharing what worked for you, {user.name}! Finding strategies that "
+                f"help us navigate challenges is so valuable. I've noted this strategy and may "
+                f"remind you of it in the future. I hope next week brings more "
+                f"moments of success for you!"
             )
             
         return response

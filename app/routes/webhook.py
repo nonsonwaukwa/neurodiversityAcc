@@ -160,12 +160,20 @@ def process_message(message):
     if recent_checkins:
         last_checkin = recent_checkins[0]
         
-        # Check if this is a response to a compassion check-in
-        if "This week may have been tough, and that's okay" in last_checkin.response or "A Moment for Self-Compassion" in last_checkin.response:
-            # Process as win reflection
+        # Check if this is a response to a compassion check-in or success celebration
+        if "A Moment for Self-Compassion" in last_checkin.response:
+            # Process as compassion reflection
             response = process_win_reflection(user.user_id, text)
             whatsapp_service.send_message(from_number, response)
-            logger.info(f"Processed win reflection from {from_number}")
+            logger.info(f"Processed compassion reflection from {from_number}")
+            return
+        
+        # Check if this is a response to a strategy question in weekly celebration
+        if "What's one strategy or 'hack' that worked well for you this week?" in last_checkin.response:
+            # Process as strategy reflection
+            response = process_win_reflection(user.user_id, text)
+            whatsapp_service.send_message(from_number, response)
+            logger.info(f"Processed strategy reflection from {from_number}")
             return
             
         # Weekly check-in response

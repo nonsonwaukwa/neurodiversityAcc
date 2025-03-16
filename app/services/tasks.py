@@ -2,9 +2,11 @@ import random
 from datetime import datetime
 from app.models.task import Task
 from app.models.user import User
+from app.models.user_insight import UserInsight
 from config.settings import Config
 from flask import current_app
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -100,14 +102,83 @@ class TaskService:
         """
         return Task.get_for_user(user_id, status, limit)
     
-    def get_adhd_hack(self):
+    def get_adhd_hack(self, user_id=None, task_description=None):
         """
-        Get a random ADHD-friendly productivity hack
+        Get a productivity hack for a user, personalized if possible
         
+        Args:
+            user_id (str, optional): The user's ID for personalization
+            task_description (str, optional): The task description for context
+            
         Returns:
-            str: An ADHD-friendly strategy
+            str: A productivity strategy
+            bool: Whether it's personalized
         """
-        return random.choice(self.adhd_hacks)
+        # If we don't have user ID or task description, return a generic hack
+        if not user_id or not task_description:
+            return random.choice(self.adhd_hacks), False
+        
+        # Extract keywords from task description
+        keywords = self._extract_keywords(task_description)
+        
+        # Try to get personalized strategies based on what's worked before for this user
+        try:
+            # Get user's successful strategies
+            personalized_strategies = UserInsight.get_strategies_for_task_type(
+                user_id, 
+                keywords, 
+                limit=2
+            )
+            
+            # If we found personalized strategies, return one
+            if personalized_strategies:
+                # Add prefix to make it clear this is based on their past success
+                strategy = f"Based on what's worked for you before: {personalized_strategies[0].content}"
+                return strategy, True
+        except Exception as e:
+            logger.error(f"Error getting personalized strategies: {e}")
+        
+        # If no personalized strategies or an error occurred, fall back to general strategies
+        return random.choice(self.adhd_hacks), False
+    
+    def _extract_keywords(self, text):
+        """
+        Extract keywords from text for matching strategies
+        
+        Args:
+            text (str): The text to analyze
+            
+        Returns:
+            list: List of keywords
+        """
+        # Convert to lowercase
+        text = text.lower()
+        
+        # Split into words and remove common stop words
+        stop_words = ['a', 'an', 'the', 'and', 'or', 'but', 'to', 'for', 'with', 'in', 'on', 'at', 'by']
+        words = [word for word in re.findall(r'\b\w+\b', text) if word not in stop_words and len(word) > 2]
+        
+        # Check for common ADHD challenge categories
+        categories = []
+        
+        if any(word in text for word in ['focus', 'concentrate', 'attention', 'distract']):
+            categories.append('focus')
+            
+        if any(word in text for word in ['start', 'begin', 'initiate', 'procrastinate']):
+            categories.append('initiation')
+            
+        if any(word in text for word in ['finish', 'complete', 'end']):
+            categories.append('completion')
+            
+        if any(word in text for word in ['boring', 'tedious', 'dull', 'repetitive']):
+            categories.append('motivation')
+            
+        if any(word in text for word in ['deadline', 'due', 'time', 'late']):
+            categories.append('time-management')
+        
+        # Combine specific words and categories
+        keywords = words + categories
+        return keywords
     
     def get_self_care_tip(self):
         """Get a random self-care tip for rest days"""
@@ -229,6 +300,209 @@ class TaskService:
             list: Pending tasks
         """
         return Task.get_for_user(user_id, status=Task.STATUS_PENDING)
+    
+    def log_task_completion(self, user_id, task_id, success_level=None):
+        """
+        Log a task completion and collect insights
+        
+        Args:
+            user_id (str): The user's ID
+            task_id (str): The task ID
+            success_level (int, optional): Rating of how successful the completion was (1-5)
+            
+        Returns:
+            bool: Success status
+        """
+        try:
+            task = Task.get(task_id)
+            if not task:
+                return False
+                
+            # Get task details
+            task_description = task.description
+            
+            # Try to detect time of day patterns
+            current_hour = datetime.now().hour
+            
+            time_category = None
+            if 5 <= current_hour < 12:
+                time_category = 'morning'
+            elif 12 <= current_hour < 17:
+                time_category = 'afternoon'
+            elif 17 <= current_hour < 21:
+                time_category = 'evening'
+            else:
+                time_category = 'night'
+                
+            # Store time pattern insight
+            tags = ['completion-time', time_category]
+            UserInsight.create(
+                user_id=user_id,
+                content=f"Completed task during {time_category} ({current_hour}:00)",
+                insight_type=UserInsight.TYPE_TIME_PATTERN,
+                task_id=task_id,
+                task_description=task_description,
+                tags=tags
+            )
+            
+            # Add analytics logging
+            analytics_service = get_analytics_service()
+            if analytics_service:
+                analytics_service.log_task_completion(
+                    user_id=user_id,
+                    task_id=task_id,
+                    task_description=task_description
+                )
+                
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error logging task completion: {e}")
+            return False
+            
+    def log_task_obstacle(self, user_id, task_id, obstacle_description):
+        """
+        Log an obstacle that prevented task completion
+        
+        Args:
+            user_id (str): The user's ID
+            task_id (str): The task ID
+            obstacle_description (str): Description of the obstacle
+            
+        Returns:
+            bool: Success status
+        """
+        try:
+            task = Task.get(task_id)
+            if not task:
+                return False
+                
+            # Store obstacle insight
+            tags = ['obstacle']
+            
+            # Check for common obstacle types
+            if any(word in obstacle_description.lower() for word in ['distract', 'focus', 'attention']):
+                tags.append('focus-issue')
+                
+            if any(word in obstacle_description.lower() for word in ['time', 'forgot', 'late']):
+                tags.append('time-management')
+                
+            if any(word in obstacle_description.lower() for word in ['energy', 'tired', 'exhausted']):
+                tags.append('energy-issue')
+                
+            if any(word in obstacle_description.lower() for word in ['anxiety', 'fear', 'worried']):
+                tags.append('anxiety')
+                
+            if any(word in obstacle_description.lower() for word in ['motivation', 'boring', 'interest']):
+                tags.append('motivation')
+                
+            # Store the obstacle
+            UserInsight.create(
+                user_id=user_id,
+                content=obstacle_description,
+                insight_type=UserInsight.TYPE_OBSTACLE,
+                task_id=task_id,
+                task_description=task.description,
+                tags=tags
+            )
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error logging task obstacle: {e}")
+            return False
+            
+    def get_personalized_task_suggestions(self, user_id):
+        """
+        Get personalized task management suggestions based on user patterns
+        
+        Args:
+            user_id (str): The user's ID
+            
+        Returns:
+            dict: Personalized suggestions
+        """
+        try:
+            user = User.get(user_id)
+            if not user:
+                return {}
+                
+            # Get user's successful strategies
+            strategies = UserInsight.get_for_user(
+                user_id,
+                insight_type=UserInsight.TYPE_STRATEGY,
+                limit=10
+            )
+            
+            # Get completion time patterns
+            time_patterns = UserInsight.get_for_user(
+                user_id,
+                insight_type=UserInsight.TYPE_TIME_PATTERN,
+                limit=10
+            )
+            
+            # Analyze time patterns
+            morning_count = sum(1 for p in time_patterns if 'morning' in p.tags)
+            afternoon_count = sum(1 for p in time_patterns if 'afternoon' in p.tags)
+            evening_count = sum(1 for p in time_patterns if 'evening' in p.tags)
+            night_count = sum(1 for p in time_patterns if 'night' in p.tags)
+            
+            total_times = morning_count + afternoon_count + evening_count + night_count
+            
+            preferred_time = None
+            if total_times > 0:
+                times = {
+                    'morning': morning_count,
+                    'afternoon': afternoon_count,
+                    'evening': evening_count,
+                    'night': night_count
+                }
+                preferred_time = max(times, key=times.get)
+            
+            # Get common obstacles
+            obstacles = UserInsight.get_for_user(
+                user_id,
+                insight_type=UserInsight.TYPE_OBSTACLE,
+                limit=10
+            )
+            
+            # Analyze obstacles
+            obstacle_tags = {}
+            for obstacle in obstacles:
+                for tag in obstacle.tags:
+                    if tag != 'obstacle':  # Skip the generic obstacle tag
+                        obstacle_tags[tag] = obstacle_tags.get(tag, 0) + 1
+            
+            common_obstacle = None
+            if obstacle_tags:
+                common_obstacle = max(obstacle_tags, key=obstacle_tags.get)
+            
+            # Build personalized suggestions
+            suggestions = {}
+            
+            # Add preferred time suggestion if available
+            if preferred_time:
+                suggestions['preferred_time'] = {
+                    'time': preferred_time,
+                    'message': f"You tend to complete tasks most successfully during the {preferred_time}."
+                }
+            
+            # Add strategy suggestions
+            if strategies:
+                suggestions['strategies'] = [s.content for s in strategies[:3]]
+            
+            # Add obstacle awareness
+            if common_obstacle:
+                suggestions['common_obstacle'] = {
+                    'type': common_obstacle,
+                    'message': f"You tend to struggle with {common_obstacle.replace('-', ' ')}. Consider planning for this challenge."
+                }
+            
+            return suggestions
+            
+        except Exception as e:
+            logger.error(f"Error getting personalized suggestions: {e}")
+            return {}
 
 # Create singleton instance
 _task_service = None
@@ -308,4 +582,6 @@ def send_task_buttons(user, task):
         f"Task: {task.description}",
         "How are you progressing with this task?",
         buttons
-    ) 
+    )
+
+from app.services.analytics import get_analytics_service 

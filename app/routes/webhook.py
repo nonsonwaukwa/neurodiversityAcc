@@ -24,7 +24,6 @@ def whatsapp_webhook():
     logger.info("Webhook endpoint hit")
     logger.info(f"Request method: {request.method}")
     logger.info(f"Request args: {request.args}")
-    logger.info(f"Request headers: {dict(request.headers)}")
     logger.info(f"Request URL: {request.url}")
     
     if request.method == 'GET':
@@ -45,28 +44,14 @@ def whatsapp_webhook():
 
     # Handle POST requests (actual messages)
     try:
-        # Log raw request data
-        raw_data = request.get_data(as_text=True)
-        logger.info("----------------------------------------")
-        logger.info("Received WhatsApp message:")
-        logger.info(f"Raw request data: {raw_data}")
-        
         # Get message data
         data = request.get_json()
-        logger.info(f"Parsed JSON data: {data}")
         
         # Extract message details
         entry = data.get('entry', [{}])[0] if data and 'entry' in data else {}
         changes = entry.get('changes', [{}])[0] if entry and 'changes' in entry else {}
         value = changes.get('value', {})
         messages = value.get('messages', [])
-        
-        logger.info("----------------------------------------")
-        logger.info("Extracted message details:")
-        logger.info(f"Entry: {entry}")
-        logger.info(f"Changes: {changes}")
-        logger.info(f"Value: {value}")
-        logger.info(f"Messages: {messages}")
         
         if not messages:
             logger.info("No messages to process")
@@ -77,20 +62,30 @@ def whatsapp_webhook():
         message_id = message.get('id')
         message_type = message.get('type')
         
-        logger.info("----------------------------------------")
-        logger.info(f"Processing message from {from_number}:")
-        logger.info(f"Message ID: {message_id}")
-        logger.info(f"Message Type: {message_type}")
-        
-        # Check for duplicate messages
+        # Check for duplicate messages first
         if is_duplicate_message(message_id):
-            logger.info(f"Skipping duplicate message {message_id}")
+            logger.info(f"Skipping duplicate message {message_id} from {from_number}")
             return jsonify({"status": "success", "message": "Duplicate message skipped"}), 200
+        
+        # Log message details after duplicate check
+        logger.info("----------------------------------------")
+        logger.info(f"Processing new message:")
+        logger.info(f"From: {from_number}")
+        logger.info(f"Message ID: {message_id}")
+        logger.info(f"Type: {message_type}")
+        
+        if message_type == 'text':
+            text = message.get('text', {}).get('body', '').strip()
+            logger.info(f"Content: {text}")
         
         # Get or create user
         try:
-            user = User.get_or_create(from_number)
-            logger.info(f"User retrieved/created: {user.user_id}")
+            # Get contact info from the message if available
+            contacts = value.get('contacts', [])
+            name = contacts[0].get('profile', {}).get('name') if contacts else None
+            
+            user = User.get_or_create(from_number, name=name)
+            logger.info(f"User {user.name} ({user.user_id}) retrieved/created")
         except Exception as e:
             logger.error(f"Error getting/creating user: {e}", exc_info=True)
             return jsonify({"status": "error", "message": "User processing error"}), 500

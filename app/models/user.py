@@ -231,4 +231,26 @@ class User:
                 self.current_hack['attempts'] = []
             self.current_hack['attempts'].append(hack)
             self.current_hack['hack'] = hack
-            self.update() 
+            self.update()
+
+    @classmethod
+    def get_or_create(cls, user_id, name=None):
+        """
+        Get a user by ID or create if not exists
+        
+        Args:
+            user_id (str): The user's WhatsApp number
+            name (str): The user's name (optional, used only if creating)
+            
+        Returns:
+            User: The existing or newly created user
+        """
+        user = cls.get(user_id)
+        if user:
+            return user
+            
+        # Create new user if not found
+        return cls.create(
+            user_id=user_id,
+            name=name or f"User {user_id[-4:]}"  # Use last 4 digits if no name
+        ) 

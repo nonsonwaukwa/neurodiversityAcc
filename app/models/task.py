@@ -2,6 +2,7 @@ from datetime import datetime
 from config.firebase_config import get_db
 import uuid
 import logging
+from google.cloud import firestore
 from google.cloud.firestore_v1.field_filter import FieldFilter
 from google.cloud.firestore_v1.field_path import FieldPath
 from google.cloud.firestore_v1.document import DocumentSnapshot
@@ -137,21 +138,21 @@ class Task:
             list: List of Task objects
         """
         db = get_db()
-        query = db.collection('tasks').where(filter=FieldFilter('user_id', '==', user_id))
+        query = db.collection('tasks').where('user_id', '==', user_id)
         
         # Apply status filter if provided
         if status:
             if isinstance(status, list):
                 # If status is a list, use "in" operator
-                query = query.where(filter=FieldFilter('status', 'in', status))
+                query = query.where('status', 'in', status)
             else:
-                query = query.where(filter=FieldFilter('status', '==', status))
+                query = query.where('status', '==', status)
         
         # Apply scheduled date filter if provided
         if scheduled_date:
             # Convert to date string for comparison
             date_str = scheduled_date.strftime('%Y-%m-%d')
-            query = query.where(filter=FieldFilter('scheduled_date', '==', date_str))
+            query = query.where('scheduled_date', '==', date_str)
         
         # Execute query
         results = query.stream()
@@ -165,8 +166,8 @@ class Task:
             
             # Handle Firestore timestamp
             created_at = data.get('created_at')
-            if isinstance(created_at, DatetimeWithNanoseconds):
-                created_at = created_at.replace(tzinfo=None)  # Convert to naive datetime
+            if isinstance(created_at, firestore.Timestamp):
+                created_at = created_at.datetime.replace(tzinfo=None)  # Convert to naive datetime
             
             # Parse scheduled date if available
             task_scheduled_date = None

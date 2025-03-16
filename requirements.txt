@@ -1,10 +1,11 @@
 # Flask Backend
-Flask==2.3.3
+Flask==3.0.0
 flask-cors==4.0.0
 gunicorn==21.2.0
 
 # Firebase
 firebase-admin==6.2.0
+google-cloud-firestore==2.13.1
 
 # WhatsApp Business API
 requests==2.31.0
@@ -12,7 +13,8 @@ python-dotenv==1.0.0
 
 # Utilities
 python-dateutil==2.8.2
-pytz==2023.3.post1
+pytz==2024.1
+APScheduler==3.10.4
 
 # Dependencies
 Werkzeug==2.3.7

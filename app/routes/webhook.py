@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, url_for
 from firebase_admin import firestore
 import logging
 import os
@@ -11,17 +11,21 @@ from app.services.message_handler import MessageHandler
 
 logger = logging.getLogger(__name__)
 
-# Create the webhook blueprint
+# Create the webhook blueprint without url_prefix
 webhook_bp = Blueprint('webhook', __name__)
 
 VERIFY_TOKEN = "odinma_accountability_webhook"  # This should match what you set in the WhatsApp dashboard
 
-@webhook_bp.route('/', methods=['GET', 'POST'])
+@webhook_bp.route('/webhook', methods=['GET', 'POST'])
+@webhook_bp.route('/webhook/', methods=['GET', 'POST'])
 def whatsapp_webhook():
     """Handle incoming WhatsApp messages and webhook verification"""
+    logger.info("----------------------------------------")
     logger.info("Webhook endpoint hit")
     logger.info(f"Request method: {request.method}")
     logger.info(f"Request args: {request.args}")
+    logger.info(f"Request headers: {dict(request.headers)}")
+    logger.info(f"Request URL: {request.url}")
     
     if request.method == 'GET':
         # Handle webhook verification
@@ -32,23 +36,19 @@ def whatsapp_webhook():
         logger.info(f"Verification request: mode={mode}, token={token}, challenge={challenge}")
         
         # If this is a verification request
-        if mode and token:
-            if mode == 'subscribe' and token == VERIFY_TOKEN:
-                logger.info("Webhook verified successfully")
-                return challenge, 200
-            else:
-                logger.error(f"Webhook verification failed. Expected token: {VERIFY_TOKEN}, Received token: {token}")
-                return 'Invalid verification token', 403
+        if mode == 'subscribe' and token == VERIFY_TOKEN:
+            logger.info("Webhook verified successfully")
+            return str(challenge), 200
         else:
-            # This is a regular GET request, not a verification
-            logger.info("Regular GET request received (not a verification request)")
-            return jsonify({"status": "success", "message": "Webhook is active"}), 200
+            logger.error(f"Webhook verification failed. Expected token: {VERIFY_TOKEN}, Received token: {token}")
+            return 'Invalid verification token', 403
 
     # Handle POST requests (actual messages)
     try:
         # Log raw request data
-        logger.info(f"Request headers: {dict(request.headers)}")
         raw_data = request.get_data(as_text=True)
+        logger.info("----------------------------------------")
+        logger.info("Received WhatsApp message:")
         logger.info(f"Raw request data: {raw_data}")
         
         # Get message data
@@ -61,7 +61,12 @@ def whatsapp_webhook():
         value = changes.get('value', {})
         messages = value.get('messages', [])
         
-        logger.info(f"Extracted message data: entry={entry}, changes={changes}, value={value}, messages={messages}")
+        logger.info("----------------------------------------")
+        logger.info("Extracted message details:")
+        logger.info(f"Entry: {entry}")
+        logger.info(f"Changes: {changes}")
+        logger.info(f"Value: {value}")
+        logger.info(f"Messages: {messages}")
         
         if not messages:
             logger.info("No messages to process")
@@ -72,7 +77,10 @@ def whatsapp_webhook():
         message_id = message.get('id')
         message_type = message.get('type')
         
-        logger.info(f"Processing message: id={message_id}, type={message_type}, from={from_number}")
+        logger.info("----------------------------------------")
+        logger.info(f"Processing message from {from_number}:")
+        logger.info(f"Message ID: {message_id}")
+        logger.info(f"Message Type: {message_type}")
         
         # Check for duplicate messages
         if is_duplicate_message(message_id):
@@ -96,7 +104,7 @@ def whatsapp_webhook():
         # Handle different message types
         if message_type == 'text':
             text = message.get('text', {}).get('body', '').strip()
-            logger.info(f"Received text message: {text}")
+            logger.info(f"Message Content: {text}")
             
             # Handle button actions
             if 'button' in data:

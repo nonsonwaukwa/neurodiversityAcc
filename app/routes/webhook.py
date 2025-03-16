@@ -6,6 +6,7 @@ from app.services.tasks import get_task_service
 from app.models.user import User
 from app.models.task import Task
 from config.firebase_config import get_db
+from app.services.message_handler import MessageHandler
 
 logger = logging.getLogger(__name__)
 
@@ -15,10 +16,29 @@ webhook_bp = Blueprint('webhook', __name__)
 @webhook_bp.route('/whatsapp', methods=['POST'])
 def whatsapp_webhook():
     """Handle incoming WhatsApp messages"""
+    logger.info("Webhook endpoint hit")
     try:
+        # Log raw request data
+        logger.info(f"Request headers: {dict(request.headers)}")
+        logger.info(f"Request data: {request.get_data(as_text=True)}")
+        
         # Get message data
         data = request.get_json()
-        logger.info(f"Received webhook data: {data}")
+        logger.info(f"Parsed JSON data: {data}")
+        
+        # Verify webhook
+        if 'hub.mode' in request.args:
+            logger.info("Received verification request")
+            mode = request.args.get('hub.mode')
+            token = request.args.get('hub.verify_token')
+            challenge = request.args.get('hub.challenge')
+            
+            if mode == 'subscribe' and token == 'your_verify_token':
+                logger.info("Webhook verified successfully")
+                return challenge, 200
+            else:
+                logger.error("Webhook verification failed")
+                return 'Invalid verification token', 403
         
         # Extract message details
         entry = data.get('entry', [{}])[0]
@@ -26,13 +46,18 @@ def whatsapp_webhook():
         value = changes.get('value', {})
         messages = value.get('messages', [])
         
+        logger.info(f"Extracted message data: entry={entry}, changes={changes}, value={value}, messages={messages}")
+        
         if not messages:
+            logger.info("No messages to process")
             return jsonify({"status": "success", "message": "No messages to process"}), 200
             
         message = messages[0]
         from_number = message.get('from')
         message_id = message.get('id')
         message_type = message.get('type')
+        
+        logger.info(f"Processing message: id={message_id}, type={message_type}, from={from_number}")
         
         # Check for duplicate messages
         if is_duplicate_message(message_id):
@@ -42,8 +67,9 @@ def whatsapp_webhook():
         # Get or create user
         try:
             user = User.get_or_create(from_number)
+            logger.info(f"User retrieved/created: {user.user_id}")
         except Exception as e:
-            logger.error(f"Error getting/creating user: {e}")
+            logger.error(f"Error getting/creating user: {e}", exc_info=True)
             return jsonify({"status": "error", "message": "User processing error"}), 500
         
         logger.info(f"Processing message from {from_number} of type {message_type} (account {user.account_index})")
@@ -55,6 +81,7 @@ def whatsapp_webhook():
         # Handle different message types
         if message_type == 'text':
             text = message.get('text', {}).get('body', '').strip()
+            logger.info(f"Received text message: {text}")
             
             # Handle button actions
             if 'button' in data:
@@ -62,6 +89,7 @@ def whatsapp_webhook():
                     button = data['button']
                     action = button.get('action')
                     payload = button.get('payload', {})
+                    logger.info(f"Processing button action: {action} with payload: {payload}")
                     
                     if action == 'done':
                         task_id = payload.get('task_id')

@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from firebase_admin import firestore
 import logging
+import os
 from app.services.whatsapp import get_whatsapp_service
 from app.services.tasks import get_task_service
 from app.models.user import User
@@ -13,10 +14,30 @@ logger = logging.getLogger(__name__)
 # Create the webhook blueprint
 webhook_bp = Blueprint('webhook', __name__)
 
-@webhook_bp.route('/whatsapp', methods=['POST'])
+VERIFY_TOKEN = "odinma_accountability_webhook"  # This should match what you set in the WhatsApp dashboard
+
+@webhook_bp.route('/', methods=['GET', 'POST'])
 def whatsapp_webhook():
-    """Handle incoming WhatsApp messages"""
+    """Handle incoming WhatsApp messages and webhook verification"""
     logger.info("Webhook endpoint hit")
+    logger.info(f"Request method: {request.method}")
+    
+    if request.method == 'GET':
+        # Handle webhook verification
+        mode = request.args.get('hub.mode')
+        token = request.args.get('hub.verify_token')
+        challenge = request.args.get('hub.challenge')
+        
+        logger.info(f"Verification request: mode={mode}, token={token}, challenge={challenge}")
+        
+        if mode == 'subscribe' and token == VERIFY_TOKEN:
+            logger.info("Webhook verified successfully")
+            return challenge, 200
+        else:
+            logger.error(f"Webhook verification failed. Expected token: {VERIFY_TOKEN}, Received token: {token}")
+            return 'Invalid verification token', 403
+
+    # Handle POST requests (actual messages)
     try:
         # Log raw request data
         logger.info(f"Request headers: {dict(request.headers)}")
@@ -25,20 +46,6 @@ def whatsapp_webhook():
         # Get message data
         data = request.get_json()
         logger.info(f"Parsed JSON data: {data}")
-        
-        # Verify webhook
-        if 'hub.mode' in request.args:
-            logger.info("Received verification request")
-            mode = request.args.get('hub.mode')
-            token = request.args.get('hub.verify_token')
-            challenge = request.args.get('hub.challenge')
-            
-            if mode == 'subscribe' and token == 'your_verify_token':
-                logger.info("Webhook verified successfully")
-                return challenge, 200
-            else:
-                logger.error("Webhook verification failed")
-                return 'Invalid verification token', 403
         
         # Extract message details
         entry = data.get('entry', [{}])[0]

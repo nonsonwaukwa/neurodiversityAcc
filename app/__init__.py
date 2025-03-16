@@ -44,7 +44,7 @@ def create_app(config_class=None):
     from app.routes.cron import cron_bp
     from app.routes.health import health_bp
     
-    app.register_blueprint(webhook_bp)
+    app.register_blueprint(webhook_bp, url_prefix='/webhook')
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
     app.register_blueprint(cron_bp, url_prefix='/api')
     app.register_blueprint(health_bp)

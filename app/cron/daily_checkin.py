@@ -4,6 +4,8 @@ from app.models.checkin import CheckIn
 from app.services.whatsapp import get_whatsapp_service
 from app.services.tasks import get_task_service, send_task_buttons
 from app.services.analytics import get_analytics_service
+from app.services.enhanced_analytics import EnhancedAnalyticsService
+from app.services.conversation_analytics import ConversationAnalyticsService
 import logging
 from datetime import datetime
 
@@ -66,6 +68,11 @@ def process_daily_response(user, message_text, sentiment_score):
     """
     whatsapp_service = get_whatsapp_service(user.account_index)
     analytics_service = get_analytics_service()
+    enhanced_analytics = EnhancedAnalyticsService()
+    conversation_analytics = ConversationAnalyticsService()
+    
+    # Log conversation themes
+    conversation_analytics.log_conversation_themes(user.user_id, message_text, 'checkin')
     
     # Get previous sentiment for comparison
     previous_sentiment = _get_previous_sentiment(user.user_id)
@@ -79,51 +86,52 @@ def process_daily_response(user, message_text, sentiment_score):
             context="daily-checkin"
         )
     
+    # Update user's streak
+    streak_count, streak_maintained = enhanced_analytics.update_user_streak(user.user_id)
+    
+    # Get the original check-in message to calculate response time
+    recent_checkins = CheckIn.get_for_user(
+        user.user_id,
+        limit=1,
+        is_response=False
+    )
+    
+    if recent_checkins:
+        original_checkin = recent_checkins[0]
+        enhanced_analytics.log_response_time(
+            user.user_id,
+            original_checkin.created_at,
+            datetime.now()
+        )
+    
     # Get sentiment trend to personalize response
     sentiment_trend = analytics_service.get_sentiment_trend(user.user_id)
     
-    # If sentiment is negative, give them easy options
-    if sentiment_score < -0.3:
-        # For negative sentiment, offer less demanding options
-        
-        # Acknowledge mood change if significant
-        acknowledgment = _get_mood_acknowledgment(previous_sentiment, sentiment_score, sentiment_trend)
-        
-        if user.planning_type == 'weekly':
-            # For weekly planners with negative sentiment,
-            # offer a choice of one task from their pre-set tasks or rest
-            today = datetime.now()
-            tasks = Task.get_for_user(user.user_id, scheduled_date=today)
-            
-            if tasks:
-                # They have tasks scheduled for today
-                response = f"{acknowledgment} Would you prefer to:"
-                
-                buttons = [
-                    {"id": "choose_one_task", "title": "Choose one task"},
-                    {"id": "one_task", "title": "New small task"},
-                    {"id": "rest_today", "title": "Rest today"}
-                ]
-                
-                whatsapp_service.send_interactive_buttons(user.user_id, response, buttons)
-            else:
-                # No tasks scheduled for today, offer standard options
-                offer_simplified_options(user, acknowledgment)
-        else:
-            # For daily planners with negative sentiment, offer simplified options
-            offer_simplified_options(user, acknowledgment)
+    # Track engagement
+    engagement_metrics = enhanced_analytics.track_user_engagement(user.user_id)
+    
+    # Customize response based on streak
+    streak_message = ""
+    if streak_maintained and streak_count > 1:
+        streak_message = f"\n🔥 Amazing! You've maintained a {streak_count}-day streak!"
+    
+    if sentiment_score < -0.3:  # Overwhelmed/negative sentiment
+        # Offer support and simplified options
+        message = (
+            f"I hear you're having a tough time.{streak_message}\n"
+            "Let's take it one small step at a time. Would you like to:"
+        )
+        send_support_options(user, message)
     else:
         # For neutral or positive sentiment
-        
-        # Create acknowledgment for positive/neutral mood
         acknowledgment = _get_mood_acknowledgment(previous_sentiment, sentiment_score, sentiment_trend)
         
         if user.planning_type == 'weekly':
             # For weekly planners, show their pre-set tasks for today
-            show_todays_tasks(user, acknowledgment)
+            show_todays_tasks(user, f"{acknowledgment}{streak_message}")
         else:
             # For daily planners, ask for up to 3 tasks
-            response = f"{acknowledgment} What tasks would you like to focus on today? You can list up to 3 tasks, and I'll help you track them."
+            response = f"{acknowledgment}{streak_message}\nWhat tasks would you like to focus on today? You can list up to 3 tasks, and I'll help you track them."
             whatsapp_service.send_message(user.user_id, response)
     
     logger.info(f"Processed daily check-in response from {user.user_id}")
@@ -402,4 +410,26 @@ def _send_user_task_reminder(user):
         for task in active_tasks:
             send_task_buttons(user, task)
     
-    logger.info(f"Sent task reminder to {user.user_id} for {len(active_tasks)} tasks") 
+    logger.info(f"Sent task reminder to {user.user_id} for {len(active_tasks)} tasks")
+
+def handle_task_creation(user, task_description):
+    """
+    Handle creation of a new task
+    
+    Args:
+        user (User): The user creating the task
+        task_description (str): The task description
+    """
+    task_service = get_task_service()
+    conversation_analytics = ConversationAnalyticsService()
+    
+    # Log task themes
+    conversation_analytics.log_conversation_themes(user.user_id, task_description, 'task')
+    
+    # Create the task
+    task = task_service.create_task(user.user_id, task_description)
+    
+    # Send task buttons
+    send_task_buttons(user, task)
+    
+    logger.info(f"Created task for {user.user_id}: {task_description}") 

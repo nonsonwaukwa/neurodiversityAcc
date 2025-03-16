@@ -1,3 +1,17 @@
+from flask import Blueprint, request, jsonify
+from firebase_admin import firestore
+import logging
+from app.services.whatsapp import get_whatsapp_service
+from app.services.tasks import get_task_service
+from app.models.user import User
+from app.models.task import Task
+from config.firebase_config import get_db
+
+logger = logging.getLogger(__name__)
+
+# Create the webhook blueprint
+webhook_bp = Blueprint('webhook', __name__)
+
 @webhook_bp.route('/whatsapp', methods=['POST'])
 def whatsapp_webhook():
     """Handle incoming WhatsApp messages"""

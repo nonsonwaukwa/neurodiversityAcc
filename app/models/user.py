@@ -9,7 +9,7 @@ class User:
     
     def __init__(self, user_id, name, role='user', account_index=0, planning_type='daily',
                  last_active=None, sentiment_history=None, task_needs_followup=None,
-                 streak_count=0, last_streak_date=None):
+                 streak_count=0, last_streak_date=None, current_hack=None):
         """
         Initialize a user
         
@@ -24,6 +24,7 @@ class User:
             task_needs_followup (str): Task ID that needs a follow-up (when user is stuck)
             streak_count (int): Current streak of consecutive days with activity
             last_streak_date (datetime): Last date the streak was updated
+            current_hack (dict): Current ADHD hack being tried
         """
         self.user_id = user_id
         self.name = name
@@ -35,6 +36,7 @@ class User:
         self.task_needs_followup = task_needs_followup
         self.streak_count = streak_count
         self.last_streak_date = last_streak_date
+        self.current_hack = current_hack
     
     def to_dict(self):
         """Convert the user to a dictionary"""
@@ -48,7 +50,8 @@ class User:
             'sentiment_history': self.sentiment_history,
             'task_needs_followup': self.task_needs_followup,
             'streak_count': self.streak_count,
-            'last_streak_date': self.last_streak_date
+            'last_streak_date': self.last_streak_date,
+            'current_hack': self.current_hack
         }
     
     @classmethod
@@ -64,7 +67,8 @@ class User:
             sentiment_history=data.get('sentiment_history', []),
             task_needs_followup=data.get('task_needs_followup'),
             streak_count=data.get('streak_count', 0),
-            last_streak_date=data.get('last_streak_date')
+            last_streak_date=data.get('last_streak_date'),
+            current_hack=data.get('current_hack')
         )
     
     @classmethod
@@ -193,4 +197,38 @@ class User:
         if not recent_scores:
             return None
         
-        return sum(recent_scores) / len(recent_scores) 
+        return sum(recent_scores) / len(recent_scores)
+    
+    def clear_current_hack(self):
+        """Clear the current hack being tried"""
+        self.current_hack = None
+        self.update()
+    
+    def set_current_hack(self, task_id, hack):
+        """
+        Set the current hack being tried
+        
+        Args:
+            task_id (str): The task ID
+            hack (str): The hack being tried
+        """
+        self.current_hack = {
+            'task_id': task_id,
+            'hack': hack,
+            'attempts': [hack]
+        }
+        self.update()
+    
+    def add_hack_attempt(self, hack):
+        """
+        Add a hack to the attempts list
+        
+        Args:
+            hack (str): The hack being tried
+        """
+        if self.current_hack:
+            if 'attempts' not in self.current_hack:
+                self.current_hack['attempts'] = []
+            self.current_hack['attempts'].append(hack)
+            self.current_hack['hack'] = hack
+            self.update() 

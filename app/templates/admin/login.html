@@ -18,7 +18,7 @@
         </div>
         
         <div class="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
-            <form id="loginForm" class="space-y-6">
+            <form id="loginForm" class="mt-8 space-y-6" action="#" method="POST">
                 <div>
                     <label for="email" class="block text-sm font-medium text-gray-700">
                         Email address
@@ -63,7 +63,7 @@
                 </div>
             </form>
 
-            <div id="error" class="mt-4 text-sm text-red-600 hidden"></div>
+            <div id="error-message" class="mt-4 text-sm text-red-600 hidden"></div>
         </div>
     </div>
 
@@ -80,23 +80,24 @@
 
         // Initialize Firebase
         firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
 
-        // Handle login form submission
-        document.getElementById('loginForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();  // Prevent form submission
+            
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
-            const errorDiv = document.getElementById('error');
+            const errorDiv = document.getElementById('error-message');
             
             try {
-                const userCredential = await auth.signInWithEmailAndPassword(email, password);
-                const user = userCredential.user;
+                // Clear any previous errors
+                errorDiv.textContent = '';
+                errorDiv.style.display = 'none';
                 
-                // Get ID token for backend authentication
-                const idToken = await user.getIdToken();
+                // Sign in with Firebase
+                const userCredential = await firebase.auth().signInWithEmailAndPassword(email, password);
+                const idToken = await userCredential.user.getIdToken();
                 
-                // Send token to backend to create session
+                // Send token to backend
                 const response = await fetch('/admin/auth/login', {
                     method: 'POST',
                     headers: {
@@ -105,15 +106,18 @@
                     body: JSON.stringify({ token: idToken })
                 });
                 
+                const data = await response.json();
+                
                 if (response.ok) {
                     // Redirect to dashboard on success
                     window.location.href = '/admin/dashboard';
                 } else {
-                    throw new Error('Authentication failed');
+                    throw new Error(data.error || 'Authentication failed');
                 }
             } catch (error) {
+                console.error('Login error:', error);
                 errorDiv.textContent = error.message;
-                errorDiv.classList.remove('hidden');
+                errorDiv.style.display = 'block';
             }
         });
 
@@ -121,23 +125,23 @@
         document.getElementById('resetPassword').addEventListener('click', async (e) => {
             e.preventDefault();
             const email = document.getElementById('email').value;
-            const errorDiv = document.getElementById('error');
+            const errorDiv = document.getElementById('error-message');
             
             if (!email) {
                 errorDiv.textContent = 'Please enter your email address';
-                errorDiv.classList.remove('hidden');
+                errorDiv.style.display = 'block';
                 return;
             }
             
             try {
-                await auth.sendPasswordResetEmail(email);
+                await firebase.auth().sendPasswordResetEmail(email);
                 errorDiv.textContent = 'Password reset email sent. Please check your inbox.';
-                errorDiv.classList.remove('hidden');
+                errorDiv.style.display = 'block';
                 errorDiv.classList.remove('text-red-600');
                 errorDiv.classList.add('text-green-600');
             } catch (error) {
                 errorDiv.textContent = error.message;
-                errorDiv.classList.remove('hidden');
+                errorDiv.style.display = 'block';
                 errorDiv.classList.add('text-red-600');
                 errorDiv.classList.remove('text-green-600');
             }

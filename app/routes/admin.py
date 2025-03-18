@@ -47,17 +47,23 @@ def auth_login():
         # Verify the token and get user info
         user = verify_firebase_token(data['token'])
         
-        # Set session
+        # Set session data
+        session.permanent = True  # Use permanent session
         session['user_id'] = user.uid
         session['email'] = user.email
+        session['is_admin'] = True  # Set admin flag
         
-        return jsonify({'success': True}), 200
+        return jsonify({
+            'success': True,
+            'redirect': url_for('admin.dashboard')
+        }), 200
         
     except ValueError as e:
+        logger.warning(f"Login validation error: {str(e)}")
         return jsonify({'error': str(e)}), 401
     except Exception as e:
-        logger.error(f"Login error: {str(e)}")
-        return jsonify({'error': 'Authentication failed'}), 500
+        logger.error(f"Login error: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Authentication failed. Please try again.'}), 500
 
 @admin_bp.route('/logout')
 def logout():

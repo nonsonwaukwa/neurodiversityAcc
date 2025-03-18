@@ -11,11 +11,18 @@ def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
+            logger.warning("No user_id in session")
             return redirect(url_for('admin.login'))
             
         try:
             # Get user from Firebase
-            user = auth.get_user(session['user_id'])
+            user_id = session.get('user_id')
+            if not user_id:
+                logger.warning("Invalid user_id in session")
+                session.clear()
+                return redirect(url_for('admin.login'))
+
+            user = auth.get_user(user_id)
             
             # Check if user has admin claim
             if not user.custom_claims or not user.custom_claims.get('admin'):
@@ -30,7 +37,7 @@ def admin_required(f):
             session.clear()
             return redirect(url_for('admin.login'))
         except Exception as e:
-            logger.error(f"Error in admin authentication: {str(e)}")
+            logger.error(f"Error in admin authentication: {str(e)}", exc_info=True)
             session.clear()
             return redirect(url_for('admin.login'))
             
@@ -77,5 +84,5 @@ def verify_firebase_token(id_token):
     except auth.UserNotFoundError:
         raise ValueError('User not found')
     except Exception as e:
-        logger.error(f"Error verifying token: {str(e)}")
+        logger.error(f"Error verifying token: {str(e)}", exc_info=True)
         raise ValueError('Authentication failed') 

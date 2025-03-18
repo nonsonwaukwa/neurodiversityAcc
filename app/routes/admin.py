@@ -42,10 +42,14 @@ def auth_login():
     try:
         data = request.get_json()
         if not data or 'token' not in data:
+            logger.warning("No token provided in request")
             return jsonify({'error': 'No token provided'}), 400
         
         # Verify the token and get user info
         user_data = verify_firebase_token(data['token'])
+        
+        # Clear any existing session
+        session.clear()
         
         # Set session data
         session.permanent = True  # Use permanent session
@@ -54,6 +58,8 @@ def auth_login():
         session['display_name'] = user_data.get('display_name')
         session['is_admin'] = True
         
+        logger.info(f"Admin user logged in successfully: {user_data['email']}")
+        
         return jsonify({
             'success': True,
             'redirect': url_for('admin.dashboard')
@@ -61,9 +67,11 @@ def auth_login():
         
     except ValueError as e:
         logger.warning(f"Login validation error: {str(e)}")
+        session.clear()
         return jsonify({'error': str(e)}), 401
     except Exception as e:
         logger.error(f"Login error: {str(e)}", exc_info=True)
+        session.clear()
         return jsonify({'error': 'Authentication failed. Please try again.'}), 500
 
 @admin_bp.route('/logout')

@@ -12,8 +12,17 @@ class CheckIn:
     TYPE_DAILY = 'Daily'
     TYPE_WEEKLY = 'Weekly'
     
+    # Tracking type constants
+    TRACKING_TYPE_AI = 'AI'
+    TRACKING_TYPE_HUMAN = 'HUMAN'
+    
+    # Input method constants
+    INPUT_METHOD_WHATSAPP = 'WHATSAPP'
+    INPUT_METHOD_BACKOFFICE = 'BACKOFFICE'
+    
     def __init__(self, checkin_id, user_id, response, checkin_type=TYPE_DAILY, 
-                 sentiment_score=None, created_at=None):
+                 sentiment_score=None, created_at=None, tracking_type=TRACKING_TYPE_AI,
+                 input_method=INPUT_METHOD_WHATSAPP):
         """
         Initialize a CheckIn object
         
@@ -24,6 +33,8 @@ class CheckIn:
             checkin_type (str): Type of check-in (Daily/Weekly)
             sentiment_score (float): NLP sentiment analysis score
             created_at (datetime): Date of check-in
+            tracking_type (str): Whether check-in is tracked via AI or human input
+            input_method (str): How the check-in was created (WhatsApp or back office)
         """
         self.checkin_id = checkin_id
         self.user_id = user_id
@@ -31,6 +42,8 @@ class CheckIn:
         self.type = checkin_type
         self.sentiment_score = sentiment_score
         self.created_at = created_at or datetime.now()
+        self.tracking_type = tracking_type
+        self.input_method = input_method
     
     @classmethod
     def create(cls, user_id, response, checkin_type=None, sentiment_score=None):
@@ -196,12 +209,28 @@ class CheckIn:
         })
     
     def to_dict(self):
-        """Convert the check-in object to a dictionary"""
+        """Convert the check-in to a dictionary"""
         return {
             'checkin_id': self.checkin_id,
             'user_id': self.user_id,
             'response': self.response,
             'type': self.type,
             'sentiment_score': self.sentiment_score,
-            'created_at': self.created_at
-        } 
+            'created_at': self.created_at,
+            'tracking_type': self.tracking_type,
+            'input_method': self.input_method
+        }
+    
+    @classmethod
+    def from_dict(cls, data):
+        """Create a CheckIn instance from a dictionary"""
+        return cls(
+            checkin_id=data.get('checkin_id'),
+            user_id=data.get('user_id'),
+            response=data.get('response'),
+            checkin_type=data.get('type', cls.TYPE_DAILY),
+            sentiment_score=data.get('sentiment_score'),
+            created_at=data.get('created_at'),
+            tracking_type=data.get('tracking_type', cls.TRACKING_TYPE_AI),
+            input_method=data.get('input_method', cls.INPUT_METHOD_WHATSAPP)
+        ) 

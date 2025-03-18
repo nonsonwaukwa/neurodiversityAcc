@@ -7,9 +7,18 @@ logger = logging.getLogger(__name__)
 class User:
     """User model for the accountability system"""
     
+    # Tracking type constants
+    TRACKING_TYPE_AI = 'AI'
+    TRACKING_TYPE_HUMAN = 'HUMAN'
+    
+    # Input method constants
+    INPUT_METHOD_WHATSAPP = 'WHATSAPP'
+    INPUT_METHOD_BACKOFFICE = 'BACKOFFICE'
+    
     def __init__(self, user_id, name, role='user', account_index=0, planning_type='daily',
                  last_active=None, sentiment_history=None, task_needs_followup=None,
-                 streak_count=0, last_streak_date=None, current_hack=None):
+                 streak_count=0, last_streak_date=None, current_hack=None,
+                 tracking_type=TRACKING_TYPE_AI, input_method=INPUT_METHOD_WHATSAPP):
         """
         Initialize a user
         
@@ -25,6 +34,8 @@ class User:
             streak_count (int): Current streak of consecutive days with activity
             last_streak_date (datetime): Last date the streak was updated
             current_hack (dict): Current ADHD hack being tried
+            tracking_type (str): Whether user is tracked via AI or human input
+            input_method (str): How the user was created (WhatsApp or back office)
         """
         self.user_id = user_id
         self.name = name
@@ -37,6 +48,8 @@ class User:
         self.streak_count = streak_count
         self.last_streak_date = last_streak_date
         self.current_hack = current_hack
+        self.tracking_type = tracking_type
+        self.input_method = input_method
     
     def to_dict(self):
         """Convert the user to a dictionary"""
@@ -51,12 +64,14 @@ class User:
             'task_needs_followup': self.task_needs_followup,
             'streak_count': self.streak_count,
             'last_streak_date': self.last_streak_date,
-            'current_hack': self.current_hack
+            'current_hack': self.current_hack,
+            'tracking_type': self.tracking_type,
+            'input_method': self.input_method
         }
     
     @classmethod
     def from_dict(cls, data):
-        """Create a user from a dictionary"""
+        """Create a User instance from a dictionary"""
         return cls(
             user_id=data.get('user_id'),
             name=data.get('name'),
@@ -68,7 +83,9 @@ class User:
             task_needs_followup=data.get('task_needs_followup'),
             streak_count=data.get('streak_count', 0),
             last_streak_date=data.get('last_streak_date'),
-            current_hack=data.get('current_hack')
+            current_hack=data.get('current_hack'),
+            tracking_type=data.get('tracking_type', cls.TRACKING_TYPE_AI),
+            input_method=data.get('input_method', cls.INPUT_METHOD_WHATSAPP)
         )
     
     @classmethod

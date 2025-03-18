@@ -14,7 +14,17 @@ class Task:
     STATUS_DONE = 'done'
     STATUS_STUCK = 'stuck'
     
-    def __init__(self, task_id, user_id, description, status=STATUS_PENDING, created_at=None, scheduled_date=None):
+    # Tracking type constants
+    TRACKING_TYPE_AI = 'AI'
+    TRACKING_TYPE_HUMAN = 'HUMAN'
+    
+    # Input method constants
+    INPUT_METHOD_WHATSAPP = 'WHATSAPP'
+    INPUT_METHOD_BACKOFFICE = 'BACKOFFICE'
+    
+    def __init__(self, task_id, user_id, description, status=STATUS_PENDING, 
+                 created_at=None, scheduled_date=None, tracking_type=TRACKING_TYPE_AI, 
+                 input_method=INPUT_METHOD_WHATSAPP):
         """
         Initialize a task
         
@@ -25,6 +35,8 @@ class Task:
             status (str): Task status (pending, in_progress, done, stuck)
             created_at (datetime): When the task was created
             scheduled_date (datetime): Date the task is scheduled for
+            tracking_type (str): Whether task is tracked via AI or human input
+            input_method (str): How the task was created (WhatsApp or back office)
         """
         self.task_id = task_id
         self.user_id = user_id
@@ -32,6 +44,8 @@ class Task:
         self.status = status
         self.created_at = created_at or datetime.now()
         self.scheduled_date = scheduled_date  # For weekly planning, tasks can be scheduled for specific days
+        self.tracking_type = tracking_type
+        self.input_method = input_method
     
     def to_dict(self):
         """Convert the task to a dictionary"""
@@ -41,7 +55,9 @@ class Task:
             'description': self.description,
             'status': self.status,
             'created_at': self.created_at,
-            'scheduled_date': self.scheduled_date
+            'scheduled_date': self.scheduled_date,
+            'tracking_type': self.tracking_type,
+            'input_method': self.input_method
         }
     
     @classmethod

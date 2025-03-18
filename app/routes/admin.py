@@ -1,17 +1,214 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, render_template, current_app, session, redirect, url_for
 from app.models.user import User
 from app.models.task import Task
 from app.models.checkin import CheckIn
 from app.services.tasks import get_task_service
-from app.services.analytics import get_analytics_service
+from app.services.analytics import get_analytics_service, calculate_metrics
 from app.services.enhanced_analytics import EnhancedAnalyticsService
 from app.services.conversation_analytics import ConversationAnalyticsService
+from datetime import datetime, timedelta
+from app.auth.middleware import admin_required, verify_firebase_token
 import json
+import firebase_admin
+from firebase_admin import firestore
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Create blueprint
-admin_bp = Blueprint('admin', __name__)
+admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
+
+@admin_bp.route('/login', methods=['GET'])
+def login():
+    """Show login page"""
+    if 'user_id' in session:
+        return redirect(url_for('admin.dashboard'))
+    
+    # Get Firebase config from environment
+    firebase_config = {
+        'api_key': current_app.config['FIREBASE_API_KEY'],
+        'auth_domain': current_app.config['FIREBASE_AUTH_DOMAIN'],
+        'project_id': current_app.config['FIREBASE_PROJECT_ID'],
+        'storage_bucket': current_app.config['FIREBASE_STORAGE_BUCKET'],
+        'messaging_sender_id': current_app.config['FIREBASE_MESSAGING_SENDER_ID'],
+        'app_id': current_app.config['FIREBASE_APP_ID']
+    }
+    
+    return render_template('admin/login.html', firebase_config=firebase_config)
+
+@admin_bp.route('/auth/login', methods=['POST'])
+def auth_login():
+    """Handle login authentication"""
+    try:
+        data = request.get_json()
+        if not data or 'token' not in data:
+            return jsonify({'error': 'No token provided'}), 400
+        
+        # Verify the token and get user info
+        user = verify_firebase_token(data['token'])
+        
+        # Set session
+        session['user_id'] = user.uid
+        session['email'] = user.email
+        
+        return jsonify({'success': True}), 200
+        
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 401
+    except Exception as e:
+        logger.error(f"Login error: {str(e)}")
+        return jsonify({'error': 'Authentication failed'}), 500
+
+@admin_bp.route('/logout')
+def logout():
+    """Handle logout"""
+    session.clear()
+    return redirect(url_for('admin.login'))
+
+@admin_bp.route('/')
+@admin_required
+def dashboard():
+    """Show admin dashboard"""
+    # Get Firestore client
+    db = firestore.client()
+    
+    # Calculate time ranges
+    now = datetime.utcnow()
+    last_30_days = now - timedelta(days=30)
+    
+    # Get all users
+    ai_users = []
+    traditional_users = []
+    users_ref = db.collection('users').stream()
+    for user_doc in users_ref:
+        user_data = user_doc.to_dict()
+        if user_data.get('tracking_type') == User.TRACKING_TYPE_AI:
+            ai_users.append(user_data)
+        else:
+            traditional_users.append(user_data)
+    
+    # Calculate metrics for AI users
+    ai_metrics = {
+        'total_users': len(ai_users),
+        'task_completion_rate': calculate_task_completion_rate(db, ai_users, last_30_days),
+        'engagement_rate': calculate_engagement_rate(db, ai_users, last_30_days),
+        'avg_sentiment': calculate_average_sentiment(db, ai_users, last_30_days)
+    }
+    
+    # Calculate metrics for traditional users
+    human_metrics = {
+        'total_users': len(traditional_users),
+        'task_completion_rate': calculate_task_completion_rate(db, traditional_users, last_30_days),
+        'engagement_rate': calculate_engagement_rate(db, traditional_users, last_30_days),
+        'avg_sentiment': calculate_average_sentiment(db, traditional_users, last_30_days)
+    }
+    
+    # Get recent activity
+    recent_activity = get_recent_activity(db, limit=10)
+    
+    return render_template('admin/dashboard.html',
+                         ai_metrics=ai_metrics,
+                         human_metrics=human_metrics,
+                         recent_activity=recent_activity)
+
+def calculate_task_completion_rate(db, users, since_date):
+    """Calculate the percentage of tasks completed on time."""
+    total_tasks = 0
+    completed_tasks = 0
+    
+    for user in users:
+        tasks_ref = db.collection('tasks').where('user_id', '==', user['id']).where('created_at', '>=', since_date).stream()
+        for task in tasks_ref:
+            task_data = task.to_dict()
+            total_tasks += 1
+            if task_data.get('status') == 'completed' and task_data.get('completed_at'):
+                if task_data['completed_at'] <= task_data.get('scheduled_date', task_data['completed_at']):
+                    completed_tasks += 1
+    
+    return (completed_tasks / total_tasks * 100) if total_tasks > 0 else 0
+
+def calculate_engagement_rate(db, users, since_date):
+    """Calculate the percentage of users who interacted in the last 30 days."""
+    active_users = 0
+    
+    for user in users:
+        # Check for any task updates, messages, or interactions
+        interactions = (
+            db.collection('tasks').where('user_id', '==', user['id'])
+            .where('updated_at', '>=', since_date)
+            .limit(1)
+            .stream()
+        )
+        
+        if len(list(interactions)) > 0:
+            active_users += 1
+            continue
+        
+        messages = (
+            db.collection('messages').where('user_id', '==', user['id'])
+            .where('timestamp', '>=', since_date)
+            .limit(1)
+            .stream()
+        )
+        
+        if len(list(messages)) > 0:
+            active_users += 1
+    
+    return (active_users / len(users) * 100) if users else 0
+
+def calculate_average_sentiment(db, users, since_date):
+    """Calculate average sentiment score from user messages."""
+    total_sentiment = 0
+    message_count = 0
+    
+    for user in users:
+        messages = (
+            db.collection('messages')
+            .where('user_id', '==', user['id'])
+            .where('timestamp', '>=', since_date)
+            .where('sentiment_score', '>', 0)
+            .stream()
+        )
+        
+        for msg in messages:
+            msg_data = msg.to_dict()
+            if 'sentiment_score' in msg_data:
+                total_sentiment += msg_data['sentiment_score']
+                message_count += 1
+    
+    return (total_sentiment / message_count) if message_count > 0 else 0
+
+def get_recent_activity(db, limit=10):
+    """Get recent user activities across the system."""
+    activities = []
+    
+    # Get recent task updates
+    tasks = (
+        db.collection('tasks')
+        .order_by('updated_at', direction=firestore.Query.DESCENDING)
+        .limit(limit)
+        .stream()
+    )
+    
+    for task in tasks:
+        task_data = task.to_dict()
+        user = db.collection('users').document(task_data['user_id']).get()
+        user_data = user.to_dict()
+        
+        activities.append({
+            'timestamp': task_data['updated_at'],
+            'user_name': user_data.get('name', 'Unknown User'),
+            'user_id': task_data['user_id'],
+            'type': 'AI' if user_data.get('tracking_type') == User.TRACKING_TYPE_AI else 'Traditional',
+            'action': f"Updated task: {task_data.get('status', 'unknown status')}"
+        })
+    
+    # Sort activities by timestamp
+    activities.sort(key=lambda x: x['timestamp'], reverse=True)
+    return activities[:limit]
 
 @admin_bp.route('/users', methods=['GET'])
+@admin_required
 def get_users():
     """Get all users"""
     try:
@@ -30,6 +227,7 @@ def get_users():
         return jsonify({"error": str(e)}), 500
 
 @admin_bp.route('/users/<user_id>', methods=['GET'])
+@admin_required
 def get_user(user_id):
     """Get a specific user"""
     try:
@@ -44,6 +242,7 @@ def get_user(user_id):
         return jsonify({"error": str(e)}), 500
 
 @admin_bp.route('/users/<user_id>/tasks', methods=['GET'])
+@admin_required
 def get_user_tasks(user_id):
     """Get tasks for a specific user"""
     try:
@@ -70,6 +269,7 @@ def get_user_tasks(user_id):
         return jsonify({"error": str(e)}), 500
 
 @admin_bp.route('/users/<user_id>/checkins', methods=['GET'])
+@admin_required
 def get_user_checkins(user_id):
     """Get check-ins for a specific user"""
     try:
@@ -95,6 +295,7 @@ def get_user_checkins(user_id):
         return jsonify({"error": str(e)}), 500
 
 @admin_bp.route('/tasks', methods=['GET'])
+@admin_required
 def get_tasks():
     """Get all tasks"""
     try:
@@ -119,6 +320,7 @@ def get_tasks():
         return jsonify({"error": str(e)}), 500
 
 @admin_bp.route('/checkins', methods=['GET'])
+@admin_required
 def get_checkins():
     """Get all check-ins"""
     try:
@@ -143,6 +345,7 @@ def get_checkins():
         return jsonify({"error": str(e)}), 500
 
 @admin_bp.route('/analytics', methods=['GET'])
+@admin_required
 def get_analytics():
     """Get analytics data"""
     try:
@@ -214,7 +417,7 @@ def get_analytics():
             
             # Count users by type
             for user in users:
-                if user.type == 'AI':
+                if user.tracking_type == User.TRACKING_TYPE_AI:
                     ai_users += 1
                 else:
                     human_users += 1
@@ -295,6 +498,7 @@ def get_analytics():
         return jsonify({"error": str(e)}), 500
 
 @admin_bp.route('/users', methods=['POST'])
+@admin_required
 def create_user():
     """Create a new user"""
     try:
@@ -319,6 +523,7 @@ def create_user():
         return jsonify({"error": str(e)}), 500
 
 @admin_bp.route('/users/<user_id>/tasks', methods=['POST'])
+@admin_required
 def create_user_task(user_id):
     """Create a new task for a user"""
     try:
@@ -342,4 +547,199 @@ def create_user_task(user_id):
         return jsonify({"task": task.to_dict()}), 201
     
     except Exception as e:
-        return jsonify({"error": str(e)}), 500 
+        return jsonify({"error": str(e)}), 500
+
+# Traditional User Management Routes
+@admin_bp.route('/traditional/users', methods=['POST'])
+@admin_required
+def create_traditional_user():
+    """Create a new traditional (human-tracked) user"""
+    try:
+        data = request.json
+        
+        # Validate required fields
+        if not all(key in data for key in ['user_id', 'name']):
+            return jsonify({"error": "Missing required fields"}), 400
+        
+        # Check if user already exists
+        existing_user = User.get(data['user_id'])
+        if existing_user:
+            return jsonify({"error": "User already exists"}), 409
+        
+        # Create user with traditional tracking
+        user = User.create(
+            user_id=data['user_id'],
+            name=data['name'],
+            tracking_type=User.TRACKING_TYPE_HUMAN,
+            input_method=User.INPUT_METHOD_BACKOFFICE
+        )
+        
+        return jsonify({"user": user.to_dict()}), 201
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@admin_bp.route('/traditional/checkins', methods=['POST'])
+@admin_required
+def create_traditional_checkin():
+    """Create a new check-in for a traditional user"""
+    try:
+        data = request.json
+        
+        # Validate required fields
+        required_fields = ['user_id', 'response', 'checkin_type']
+        if not all(key in data for key in required_fields):
+            return jsonify({"error": f"Missing required fields: {required_fields}"}), 400
+        
+        # Verify user exists and is traditional
+        user = User.get(data['user_id'])
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        if user.tracking_type != User.TRACKING_TYPE_HUMAN:
+            return jsonify({"error": "Check-ins can only be added for traditional users"}), 400
+        
+        # Create check-in
+        checkin = CheckIn.create(
+            user_id=data['user_id'],
+            response=data['response'],
+            checkin_type=data['checkin_type'],
+            sentiment_score=data.get('sentiment_score'),
+            tracking_type=CheckIn.TRACKING_TYPE_HUMAN,
+            input_method=CheckIn.INPUT_METHOD_BACKOFFICE
+        )
+        
+        return jsonify({"checkin": checkin.to_dict()}), 201
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@admin_bp.route('/traditional/tasks', methods=['POST'])
+@admin_required
+def create_traditional_task():
+    """Create a new task for a traditional user"""
+    try:
+        data = request.json
+        
+        # Validate required fields
+        required_fields = ['user_id', 'description']
+        if not all(key in data for key in required_fields):
+            return jsonify({"error": f"Missing required fields: {required_fields}"}), 400
+        
+        # Verify user exists and is traditional
+        user = User.get(data['user_id'])
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        if user.tracking_type != User.TRACKING_TYPE_HUMAN:
+            return jsonify({"error": "Tasks can only be added for traditional users"}), 400
+        
+        # Create task
+        task = Task.create(
+            user_id=data['user_id'],
+            description=data['description'],
+            status=data.get('status', Task.STATUS_PENDING),
+            scheduled_date=data.get('scheduled_date'),
+            tracking_type=Task.TRACKING_TYPE_HUMAN,
+            input_method=Task.INPUT_METHOD_BACKOFFICE
+        )
+        
+        return jsonify({"task": task.to_dict()}), 201
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@admin_bp.route('/traditional/tasks/<task_id>', methods=['PUT'])
+@admin_required
+def update_traditional_task(task_id):
+    """Update a traditional user's task"""
+    try:
+        data = request.json
+        
+        # Get the task
+        task = Task.get(task_id)
+        if not task:
+            return jsonify({"error": "Task not found"}), 404
+        
+        # Verify it's a traditional task
+        if task.tracking_type != Task.TRACKING_TYPE_HUMAN:
+            return jsonify({"error": "Can only update traditional tasks"}), 400
+        
+        # Update allowed fields
+        if 'status' in data:
+            task.status = data['status']
+        if 'description' in data:
+            task.description = data['description']
+        if 'scheduled_date' in data:
+            task.scheduled_date = data['scheduled_date']
+        
+        # Save changes
+        task.update()
+        
+        return jsonify({"task": task.to_dict()}), 200
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# Analytics Routes
+@admin_bp.route('/analytics/comparison', methods=['GET'])
+@admin_required
+def get_comparative_analytics():
+    """Get comparative analytics between AI and traditional users"""
+    try:
+        # Get services
+        analytics_service = get_analytics_service()
+        enhanced_analytics = EnhancedAnalyticsService()
+        
+        # Get query parameters
+        days = int(request.args.get('days', 30))
+        
+        # Get all users
+        all_users = User.get_all()
+        ai_users = [u for u in all_users if u.tracking_type == User.TRACKING_TYPE_AI]
+        human_users = [u for u in all_users if u.tracking_type == User.TRACKING_TYPE_HUMAN]
+        
+        # Calculate metrics for both groups
+        ai_metrics = calculate_group_metrics(ai_users, days)
+        human_metrics = calculate_group_metrics(human_users, days)
+        
+        return jsonify({
+            "ai_metrics": ai_metrics,
+            "human_metrics": human_metrics,
+            "comparison": {
+                "task_completion_difference": human_metrics['task_completion_rate'] - ai_metrics['task_completion_rate'],
+                "engagement_difference": human_metrics['engagement_rate'] - ai_metrics['engagement_rate'],
+                "sentiment_difference": human_metrics['avg_sentiment'] - ai_metrics['avg_sentiment']
+            }
+        }), 200
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+def calculate_group_metrics(users, days):
+    """Calculate metrics for a group of users"""
+    if not users:
+        return {
+            "task_completion_rate": 0,
+            "engagement_rate": 0,
+            "avg_sentiment": 0,
+            "total_users": 0
+        }
+    
+    analytics_service = get_analytics_service()
+    total_completion_rate = 0
+    total_engagement_rate = 0
+    total_sentiment = 0
+    
+    for user in users:
+        total_completion_rate += analytics_service.get_task_completion_rate(user.user_id, days)
+        total_engagement_rate += analytics_service.get_user_response_rate(user.user_id, days)
+        sentiment_scores = [s for s in user.sentiment_history if s is not None]
+        user_sentiment = sum(sentiment_scores) / len(sentiment_scores) if sentiment_scores else 0
+        total_sentiment += user_sentiment
+    
+    num_users = len(users)
+    return {
+        "task_completion_rate": total_completion_rate / num_users,
+        "engagement_rate": total_engagement_rate / num_users,
+        "avg_sentiment": total_sentiment / num_users,
+        "total_users": num_users
+    } 

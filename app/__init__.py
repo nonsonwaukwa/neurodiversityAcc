@@ -4,6 +4,7 @@ import os
 from dotenv import load_dotenv
 import logging
 import sys
+from firebase_admin import credentials, initialize_app
 
 # Load environment variables
 load_dotenv()
@@ -38,6 +39,10 @@ def create_app(config_class=None):
     initialize_firebase()
     logger.info("Firebase initialized - using Firebase for database operations")
     
+    # Initialize Firebase Admin
+    cred = credentials.Certificate('path/to/serviceAccountKey.json')
+    initialize_app(cred)
+    
     # Import and register blueprints
     from app.routes.webhook import webhook_bp
     from app.routes.admin import admin_bp
@@ -52,5 +57,12 @@ def create_app(config_class=None):
     @app.route('/')
     def home():
         return {'status': 'ok', 'message': 'Neurodiversity Accountability System API is running'}
+    
+    # Add Chart.js to template context
+    @app.context_processor
+    def inject_chart_js():
+        return {
+            'chart_js_url': 'https://cdn.jsdelivr.net/npm/chart.js'
+        }
     
     return app 

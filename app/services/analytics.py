@@ -162,6 +162,89 @@ class AnalyticsService:
             "samples": len(recent_scores)
         }
 
+def calculate_metrics(user_ids=None, days=30):
+    """
+    Calculate various metrics for users
+    
+    Args:
+        user_ids (list): Optional list of user IDs to calculate metrics for
+        days (int): Number of days to analyze
+        
+    Returns:
+        dict: Dictionary of metrics
+    """
+    metrics = {
+        'total_users': 0,
+        'active_users': 0,
+        'total_tasks': 0,
+        'completed_tasks': 0,
+        'task_completion_rate': 0,
+        'avg_sentiment': 0,
+        'response_rate': 0
+    }
+    
+    # Get all users or specific users
+    users = []
+    if user_ids:
+        for user_id in user_ids:
+            user = User.get(user_id)
+            if user:
+                users.append(user)
+    else:
+        users = User.get_all()
+    
+    if not users:
+        return metrics
+    
+    # Total users
+    metrics['total_users'] = len(users)
+    
+    # Calculate active users (users with activity in the time period)
+    start_date = datetime.now() - timedelta(days=days)
+    active_users = 0
+    total_sentiment = 0
+    sentiment_count = 0
+    total_response_rate = 0
+    response_rate_count = 0
+    
+    for user in users:
+        # Check for recent tasks
+        tasks = Task.get_for_user(user.id, created_after=start_date)
+        
+        if tasks:
+            active_users += 1
+            
+            # Add to task counts
+            metrics['total_tasks'] += len(tasks)
+            completed_tasks = [t for t in tasks if t.status == Task.STATUS_DONE]
+            metrics['completed_tasks'] += len(completed_tasks)
+        
+        # Get sentiment data
+        sentiment_data = AnalyticsService.get_sentiment_trend(user.id, days=days)
+        if sentiment_data['samples'] > 0:
+            total_sentiment += sentiment_data['average']
+            sentiment_count += 1
+        
+        # Get response rate
+        response_rate = AnalyticsService.get_user_response_rate(user.id, days=days)
+        if response_rate is not None:
+            total_response_rate += response_rate
+            response_rate_count += 1
+    
+    # Calculate aggregated metrics
+    metrics['active_users'] = active_users
+    
+    if metrics['total_tasks'] > 0:
+        metrics['task_completion_rate'] = (metrics['completed_tasks'] / metrics['total_tasks']) * 100
+    
+    if sentiment_count > 0:
+        metrics['avg_sentiment'] = total_sentiment / sentiment_count
+    
+    if response_rate_count > 0:
+        metrics['response_rate'] = total_response_rate / response_rate_count
+    
+    return metrics
+
 # Create singleton instance
 _analytics_service = None
 

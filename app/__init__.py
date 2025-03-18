@@ -71,8 +71,10 @@ def create_app(config_class=None):
     if config_class:
         app.config.from_object(config_class)
     else:
-        # Set some default configurations
-        app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', 'dev-key-change-in-production')
+        # Load the default Config class from settings
+        from config.settings import Config
+        app.config.from_object(Config)
+        logger.info("Loaded configuration from config.settings.Config")
     
     # Import and register blueprints
     from app.routes.webhook import webhook_bp

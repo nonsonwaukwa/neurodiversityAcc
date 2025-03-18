@@ -45,13 +45,14 @@ def auth_login():
             return jsonify({'error': 'No token provided'}), 400
         
         # Verify the token and get user info
-        user = verify_firebase_token(data['token'])
+        user_data = verify_firebase_token(data['token'])
         
         # Set session data
         session.permanent = True  # Use permanent session
-        session['user_id'] = user.uid
-        session['email'] = user.email
-        session['is_admin'] = True  # Set admin flag
+        session['user_id'] = user_data['uid']
+        session['email'] = user_data['email']
+        session['display_name'] = user_data.get('display_name')
+        session['is_admin'] = True
         
         return jsonify({
             'success': True,

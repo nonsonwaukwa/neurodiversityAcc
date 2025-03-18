@@ -60,7 +60,13 @@ def verify_firebase_token(id_token):
         if not user.custom_claims or not user.custom_claims.get('admin'):
             raise ValueError('User is not an admin')
             
-        return user
+        # Return user data in a format that can be serialized to session
+        return {
+            'uid': user.uid,
+            'email': user.email,
+            'display_name': user.display_name,
+            'is_admin': True
+        }
         
     except auth.InvalidIdTokenError:
         raise ValueError('Invalid token')

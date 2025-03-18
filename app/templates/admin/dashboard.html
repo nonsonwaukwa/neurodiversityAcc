@@ -4,12 +4,12 @@
 <div class="flex justify-between items-center mb-6">
     <h1 class="text-2xl font-semibold">Good morning, {{ session.get('display_name', 'Admin') }}!</h1>
     <div class="flex space-x-4">
-        <button class="p-2 rounded-full hover:bg-gray-100">
+        <button class="p-2 rounded-full hover:bg-gray-100" title="Notifications">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
             </svg>
         </button>
-        <button class="p-2 rounded-full hover:bg-gray-100">
+        <button class="p-2 rounded-full hover:bg-gray-100" title="Settings">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
@@ -24,7 +24,10 @@
     <!-- Key Metrics -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
         <!-- Total Users -->
-        <div class="bg-white rounded-xl shadow-sm p-6">
+        <div class="bg-white rounded-xl shadow-sm p-6 group relative">
+            <div class="absolute invisible group-hover:visible bg-gray-900 text-white text-sm rounded p-2 -mt-14 max-w-xs">
+                Total number of users registered in the system, including both AI-tracked and human-tracked users.
+            </div>
             <div class="flex justify-between items-start mb-4">
                 <div>
                     <p class="text-sm text-gray-600">Total Users</p>
@@ -40,10 +43,14 @@
                 <span class="text-green-500 text-sm">+{{ ((ai_metrics.total_users / (human_metrics.total_users or 1)) * 100)|round(1) }}%</span>
                 <span class="text-gray-500 text-sm">vs last month</span>
             </div>
+            <p class="mt-2 text-xs text-gray-500">Initial state: System is ready for user registration</p>
         </div>
 
         <!-- Task Completion -->
-        <div class="bg-white rounded-xl shadow-sm p-6">
+        <div class="bg-white rounded-xl shadow-sm p-6 group relative">
+            <div class="absolute invisible group-hover:visible bg-gray-900 text-white text-sm rounded p-2 -mt-14 max-w-xs">
+                Percentage of tasks completed on time. Tasks are marked complete when users finish their scheduled activities.
+            </div>
             <div class="flex justify-between items-start mb-4">
                 <div>
                     <p class="text-sm text-gray-600">Task Completion</p>
@@ -58,10 +65,14 @@
             <div class="flex items-center space-x-2">
                 <span class="text-green-500 text-sm">On Track</span>
             </div>
+            <p class="mt-2 text-xs text-gray-500">No tasks created yet. Create tasks to start tracking completion rates.</p>
         </div>
 
         <!-- Active Users -->
-        <div class="bg-white rounded-xl shadow-sm p-6">
+        <div class="bg-white rounded-xl shadow-sm p-6 group relative">
+            <div class="absolute invisible group-hover:visible bg-gray-900 text-white text-sm rounded p-2 -mt-14 max-w-xs">
+                Percentage of users who have interacted with the system in the last 30 days through tasks, messages, or check-ins.
+            </div>
             <div class="flex justify-between items-start mb-4">
                 <div>
                     <p class="text-sm text-gray-600">Active Users</p>
@@ -77,10 +88,14 @@
                 <span class="text-green-500 text-sm">+{{ ((ai_metrics.engagement_rate / (human_metrics.engagement_rate or 1)) * 100)|round(1) }}%</span>
                 <span class="text-gray-500 text-sm">vs last week</span>
             </div>
+            <p class="mt-2 text-xs text-gray-500">Waiting for first user interaction to calculate engagement.</p>
         </div>
 
         <!-- Average Sentiment -->
-        <div class="bg-white rounded-xl shadow-sm p-6">
+        <div class="bg-white rounded-xl shadow-sm p-6 group relative">
+            <div class="absolute invisible group-hover:visible bg-gray-900 text-white text-sm rounded p-2 -mt-14 max-w-xs">
+                Average sentiment score from user check-ins. Ranges from 0 (negative) to 1 (positive), measuring emotional well-being.
+            </div>
             <div class="flex justify-between items-start mb-4">
                 <div>
                     <p class="text-sm text-gray-600">Avg Sentiment</p>
@@ -95,6 +110,7 @@
             <div class="flex items-center space-x-2">
                 <span class="text-green-500 text-sm">Positive</span>
             </div>
+            <p class="mt-2 text-xs text-gray-500">Waiting for first check-in to calculate sentiment.</p>
         </div>
     </div>
 
@@ -103,7 +119,10 @@
         <!-- User Growth Chart -->
         <div class="bg-white rounded-xl shadow-sm p-6">
             <div class="flex justify-between items-center mb-6">
-                <h3 class="text-lg font-semibold">User Growth</h3>
+                <div>
+                    <h3 class="text-lg font-semibold">User Growth</h3>
+                    <p class="text-sm text-gray-500 mt-1">Monthly trend of AI vs human-tracked users</p>
+                </div>
                 <div class="flex items-center space-x-2">
                     <span class="inline-block w-3 h-3 rounded-full bg-indigo-500"></span>
                     <span class="text-sm text-gray-600">AI Users</span>
@@ -117,7 +136,10 @@
         <!-- Task Completion Chart -->
         <div class="bg-white rounded-xl shadow-sm p-6">
             <div class="flex justify-between items-center mb-6">
-                <h3 class="text-lg font-semibold">Task Completion</h3>
+                <div>
+                    <h3 class="text-lg font-semibold">Task Completion</h3>
+                    <p class="text-sm text-gray-500 mt-1">Weekly task completion percentage</p>
+                </div>
                 <div class="flex items-center space-x-2">
                     <span class="inline-block w-3 h-3 rounded-full bg-indigo-500"></span>
                     <span class="text-sm text-gray-600">Completed</span>
@@ -132,9 +154,13 @@
     <!-- Recent Activity -->
     <div class="bg-white rounded-xl shadow-sm p-6">
         <div class="flex justify-between items-center mb-6">
-            <h3 class="text-lg font-semibold">Recent Activity</h3>
+            <div>
+                <h3 class="text-lg font-semibold">Recent Activity</h3>
+                <p class="text-sm text-gray-500 mt-1">Latest user interactions and system events</p>
+            </div>
             <button class="text-sm text-indigo-600 hover:text-indigo-800">View All</button>
         </div>
+        {% if recent_activity %}
         <div class="space-y-4">
             {% for activity in recent_activity[:5] %}
             <div class="flex items-center justify-between py-3">
@@ -155,6 +181,12 @@
             </div>
             {% endfor %}
         </div>
+        {% else %}
+        <div class="text-center py-8">
+            <p class="text-gray-500">No recent activity to display.</p>
+            <p class="text-sm text-gray-400 mt-1">Activity will appear here as users interact with the system.</p>
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}
@@ -169,14 +201,14 @@ const userGrowthChart = new Chart(userGrowthCtx, {
         labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
         datasets: [{
             label: 'AI Users',
-            data: [30, 45, 60, 70, 80, {{ ai_metrics.total_users }}],
+            data: [0, 0, 0, 0, 0, {{ ai_metrics.total_users }}],
             borderColor: 'rgb(79, 70, 229)',
             backgroundColor: 'rgba(79, 70, 229, 0.1)',
             tension: 0.4,
             fill: true
         }, {
             label: 'Human Users',
-            data: [20, 25, 30, 35, 40, {{ human_metrics.total_users }}],
+            data: [0, 0, 0, 0, 0, {{ human_metrics.total_users }}],
             borderColor: 'rgb(16, 185, 129)',
             backgroundColor: 'rgba(16, 185, 129, 0.1)',
             tension: 0.4,
@@ -188,6 +220,13 @@ const userGrowthChart = new Chart(userGrowthCtx, {
         plugins: {
             legend: {
                 display: false
+            },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        return context.dataset.label + ': ' + context.parsed.y + ' users';
+                    }
+                }
             }
         },
         scales: {
@@ -215,7 +254,7 @@ const taskCompletionChart = new Chart(taskCompletionCtx, {
         labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
         datasets: [{
             label: 'Tasks Completed',
-            data: [65, 75, 70, 80, 85, 90, {{ ai_metrics.task_completion_rate }}],
+            data: [0, 0, 0, 0, 0, 0, {{ ai_metrics.task_completion_rate }}],
             borderColor: 'rgb(79, 70, 229)',
             backgroundColor: 'rgba(79, 70, 229, 0.1)',
             tension: 0.4,
@@ -227,14 +266,27 @@ const taskCompletionChart = new Chart(taskCompletionCtx, {
         plugins: {
             legend: {
                 display: false
+            },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        return 'Completion Rate: ' + context.parsed.y + '%';
+                    }
+                }
             }
         },
         scales: {
             y: {
                 beginAtZero: true,
+                max: 100,
                 grid: {
                     display: true,
                     color: 'rgba(0, 0, 0, 0.05)'
+                },
+                ticks: {
+                    callback: function(value) {
+                        return value + '%';
+                    }
                 }
             },
             x: {

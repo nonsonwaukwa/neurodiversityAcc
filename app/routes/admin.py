@@ -207,10 +207,28 @@ def get_recent_activity(db, limit=10):
     activities.sort(key=lambda x: x['timestamp'], reverse=True)
     return activities[:limit]
 
+@admin_bp.route('/users')
+@admin_required
+def users():
+    """Show users page"""
+    # Get Firestore client
+    db = firestore.client()
+    
+    # Get all users
+    users_ref = db.collection('users').stream()
+    users_data = []
+    
+    for user_doc in users_ref:
+        user_data = user_doc.to_dict()
+        user_data['id'] = user_doc.id
+        users_data.append(user_data)
+    
+    return render_template('admin/users.html', users=users_data)
+
 @admin_bp.route('/users', methods=['GET'])
 @admin_required
 def get_users():
-    """Get all users"""
+    """Get all users API endpoint"""
     try:
         # Extract query parameters
         user_type = request.args.get('type')  # 'AI' or 'Human'

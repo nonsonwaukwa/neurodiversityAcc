@@ -7,6 +7,7 @@ import logging
 import sys
 from firebase_admin import credentials, initialize_app
 import firebase_admin
+from datetime import datetime
 
 # Load environment variables
 load_dotenv()
@@ -99,6 +100,17 @@ def create_app(config_class=None):
     @app.route('/')
     def home():
         return {'status': 'ok', 'message': 'Neurodiversity Accountability System API is running'}
+    
+    # Add template filters
+    @app.template_filter('datetime')
+    def format_datetime(value):
+        """Format a datetime object to a readable string"""
+        if isinstance(value, str):
+            try:
+                value = datetime.fromisoformat(value.replace('Z', '+00:00'))
+            except (ValueError, AttributeError):
+                return value
+        return value.strftime('%Y-%m-%d %H:%M:%S') if value else ''
     
     # Add Chart.js to template context
     @app.context_processor

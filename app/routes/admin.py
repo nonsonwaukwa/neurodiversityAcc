@@ -66,6 +66,7 @@ def logout():
     return redirect(url_for('admin.login'))
 
 @admin_bp.route('/')
+@admin_bp.route('/dashboard')
 @admin_required
 def dashboard():
     """Show admin dashboard"""
@@ -210,11 +211,24 @@ def get_recent_activity(db, limit=10):
 @admin_bp.route('/users')
 @admin_required
 def users():
-    """Show users page"""
+    """Show users page or return users JSON based on Accept header"""
     # Get Firestore client
     db = firestore.client()
     
+    # Extract query parameters for API requests
+    user_type = request.args.get('type')  # 'AI' or 'Human'
+    
     # Get all users
+    if request.headers.get('Accept') == 'application/json':
+        try:
+            # Get users with optional type filter
+            users = User.get_all(user_type)
+            users_data = [user.to_dict() for user in users]
+            return jsonify({"users": users_data}), 200
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    
+    # For HTML requests, get all users
     users_ref = db.collection('users').stream()
     users_data = []
     
@@ -224,25 +238,6 @@ def users():
         users_data.append(user_data)
     
     return render_template('admin/users.html', users=users_data)
-
-@admin_bp.route('/users', methods=['GET'])
-@admin_required
-def get_users():
-    """Get all users API endpoint"""
-    try:
-        # Extract query parameters
-        user_type = request.args.get('type')  # 'AI' or 'Human'
-        
-        # Get users
-        users = User.get_all(user_type)
-        
-        # Convert to dictionaries
-        users_data = [user.to_dict() for user in users]
-        
-        return jsonify({"users": users_data}), 200
-    
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 @admin_bp.route('/users/<user_id>', methods=['GET'])
 @admin_required

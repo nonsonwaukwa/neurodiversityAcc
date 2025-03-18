@@ -1,5 +1,5 @@
 from functools import wraps
-from flask import request, redirect, url_for, session, current_app
+from flask import session, redirect, url_for, current_app
 import firebase_admin
 from firebase_admin import auth
 import logging
@@ -10,60 +10,66 @@ def admin_required(f):
     """Decorator to require admin authentication for routes"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # Check if user is logged in
         if 'user_id' not in session:
             return redirect(url_for('admin.login'))
-        
+            
         try:
-            # Verify the Firebase ID token
+            # Get user from Firebase
             user = auth.get_user(session['user_id'])
             
             # Check if user has admin claim
             if not user.custom_claims or not user.custom_claims.get('admin'):
-                logger.warning(f"Non-admin user {user.uid} attempted to access admin route")
+                logger.warning(f"Non-admin user attempted to access admin route: {user.uid}")
+                session.clear()
                 return redirect(url_for('admin.login'))
-            
+                
             return f(*args, **kwargs)
             
-        except auth.InvalidIdTokenError:
-            # Token is invalid or expired
-            session.clear()
-            return redirect(url_for('admin.login'))
         except auth.UserNotFoundError:
-            # User no longer exists
+            logger.warning(f"User not found in Firebase: {session.get('user_id')}")
             session.clear()
             return redirect(url_for('admin.login'))
         except Exception as e:
             logger.error(f"Error in admin authentication: {str(e)}")
             session.clear()
             return redirect(url_for('admin.login'))
-    
+            
     return decorated_function
 
-def verify_firebase_token(token):
-    """Verify Firebase ID token and return user info"""
+def verify_firebase_token(id_token):
+    """
+    Verify Firebase ID token
+    
+    Args:
+        id_token (str): The Firebase ID token to verify
+        
+    Returns:
+        dict: The decoded token claims
+        
+    Raises:
+        ValueError: If token is invalid
+    """
     try:
         # Verify the ID token
-        decoded_token = auth.verify_id_token(token)
-        user_id = decoded_token['uid']
+        decoded_token = auth.verify_id_token(id_token)
         
-        # Get the user
-        user = auth.get_user(user_id)
+        # Get user
+        user = auth.get_user(decoded_token['uid'])
         
         # Check admin claim
         if not user.custom_claims or not user.custom_claims.get('admin'):
-            raise ValueError("User is not an admin")
-        
+            raise ValueError('User is not an admin')
+            
         return user
         
     except auth.InvalidIdTokenError:
-        raise ValueError("Invalid token")
+        raise ValueError('Invalid token')
     except auth.ExpiredIdTokenError:
-        raise ValueError("Token has expired")
+        raise ValueError('Token has expired')
     except auth.RevokedIdTokenError:
-        raise ValueError("Token has been revoked")
+        raise ValueError('Token has been revoked')
     except auth.UserNotFoundError:
-        raise ValueError("User not found")
+        raise ValueError('User not found')
     except Exception as e:
-        logger.error(f"Error verifying Firebase token: {str(e)}")
-        raise ValueError("Authentication failed") 
+        logger.error(f"Error verifying token: {str(e)}")
+        raise ValueError('Authentication failed') 

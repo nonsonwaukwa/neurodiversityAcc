@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard - Neurodiversity Accountability System</title>
-    <script src="{{ chart_js_url }}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100">
@@ -15,20 +15,21 @@
                 <span class="text-white text-2xl font-semibold">Admin Panel</span>
             </div>
             <div class="flex flex-col flex-1">
-                <a href="{{ url_for('admin.dashboard') }}" class="text-gray-300 hover:text-white py-2">
+                <a href="{{ url_for('admin.dashboard') }}" class="text-gray-300 hover:text-white py-2 {% if request.endpoint == 'admin.dashboard' %}text-white{% endif %}">
                     <span>Dashboard</span>
                 </a>
-                <a href="{{ url_for('admin.users') }}" class="text-gray-300 hover:text-white py-2">
+                <a href="{{ url_for('admin.users') }}" class="text-gray-300 hover:text-white py-2 {% if request.endpoint == 'admin.users' %}text-white{% endif %}">
                     <span>Users</span>
                 </a>
-                <a href="#" class="text-gray-300 hover:text-white py-2">
+                <a href="{{ url_for('admin.get_tasks') }}" class="text-gray-300 hover:text-white py-2 {% if request.endpoint == 'admin.get_tasks' %}text-white{% endif %}">
                     <span>Tasks</span>
                 </a>
-                <a href="#" class="text-gray-300 hover:text-white py-2">
+                <a href="{{ url_for('admin.get_analytics') }}" class="text-gray-300 hover:text-white py-2 {% if request.endpoint == 'admin.get_analytics' %}text-white{% endif %}">
                     <span>Analytics</span>
                 </a>
-                <a href="#" class="text-gray-300 hover:text-white py-2">
-                    <span>System</span>
+                <div class="flex-grow"></div>
+                <a href="{{ url_for('admin.logout') }}" class="text-gray-300 hover:text-white py-2">
+                    <span>Logout</span>
                 </a>
             </div>
         </nav>

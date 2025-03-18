@@ -133,7 +133,13 @@ def calculate_task_completion_rate(db, users, since_date):
     completed_tasks = 0
     
     for user in users:
-        tasks_ref = db.collection('tasks').where('user_id', '==', user['user_id']).where('created_at', '>=', since_date).stream()
+        # First get all tasks for the user
+        tasks_ref = (db.collection('tasks')
+                    .where('user_id', '==', user['user_id'])
+                    .order_by('created_at')
+                    .start_at({'created_at': since_date})
+                    .stream())
+        
         for task in tasks_ref:
             task_data = task.to_dict()
             total_tasks += 1

@@ -188,18 +188,21 @@ def calculate_average_sentiment(db, users, since_date):
     message_count = 0
     
     for user in users:
+        # First get messages by timestamp
         messages = (
             db.collection('messages')
             .where('user_id', '==', user['user_id'])
-            .where('timestamp', '>=', since_date)
-            .where('sentiment_score', '>', 0)
+            .order_by('timestamp')
+            .start_at({'timestamp': since_date})
             .stream()
         )
         
+        # Then filter sentiment scores in memory
         for msg in messages:
             msg_data = msg.to_dict()
-            if 'sentiment_score' in msg_data:
-                total_sentiment += msg_data['sentiment_score']
+            sentiment_score = msg_data.get('sentiment_score', 0)
+            if sentiment_score > 0:
+                total_sentiment += sentiment_score
                 message_count += 1
     
     return (total_sentiment / message_count) if message_count > 0 else 0

@@ -66,15 +66,17 @@ class Config:
     ]
 
     # Firebase Admin SDK
-    FIREBASE_CREDENTIALS = os.getenv('FIREBASE_CREDENTIALS_PATH', 'path/to/serviceAccountKey.json')
+    FIREBASE_CREDENTIALS = os.environ.get('FIREBASE_CREDENTIALS_PATH', 'path/to/serviceAccountKey.json')
+    FIREBASE_CREDENTIALS_JSON = os.environ.get('FIREBASE_CREDENTIALS')
     
     # Firebase Web SDK
-    FIREBASE_API_KEY = os.getenv('FIREBASE_API_KEY')
-    FIREBASE_AUTH_DOMAIN = os.getenv('FIREBASE_AUTH_DOMAIN')
-    FIREBASE_PROJECT_ID = os.getenv('FIREBASE_PROJECT_ID')
-    FIREBASE_STORAGE_BUCKET = os.getenv('FIREBASE_STORAGE_BUCKET')
-    FIREBASE_MESSAGING_SENDER_ID = os.getenv('FIREBASE_MESSAGING_SENDER_ID')
-    FIREBASE_APP_ID = os.getenv('FIREBASE_APP_ID')
+    FIREBASE_API_KEY = os.environ.get('FIREBASE_API_KEY')
+    FIREBASE_AUTH_DOMAIN = os.environ.get('FIREBASE_AUTH_DOMAIN')
+    FIREBASE_PROJECT_ID = os.environ.get('FIREBASE_PROJECT_ID')
+    FIREBASE_STORAGE_BUCKET = os.environ.get('FIREBASE_STORAGE_BUCKET')
+    FIREBASE_MESSAGING_SENDER_ID = os.environ.get('FIREBASE_MESSAGING_SENDER_ID')
+    FIREBASE_APP_ID = os.environ.get('FIREBASE_APP_ID')
+    FIREBASE_MEASUREMENT_ID = os.environ.get('FIREBASE_MEASUREMENT_ID')
     
     # Session configuration
     SESSION_TYPE = 'filesystem'

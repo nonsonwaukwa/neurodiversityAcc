@@ -4,10 +4,6 @@ from firebase_functions import https_fn
 from flask import Flask, request
 from app import create_app
 
-# Initialize Firebase Admin
-cred = credentials.ApplicationDefault()
-firebase_admin.initialize_app(cred)
-
 # Create Flask app
 app = create_app()
 

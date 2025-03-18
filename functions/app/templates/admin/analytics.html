@@ -1,0 +1,184 @@
+{% extends "admin/layout.html" %}
+
+{% block header %}Analytics{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Time Range Selector -->
+    <div class="bg-white shadow rounded-lg p-6">
+        <h2 class="text-xl font-semibold mb-4">Time Range</h2>
+        <select id="timeRange" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+            <option value="7">Last 7 days</option>
+            <option value="30" selected>Last 30 days</option>
+            <option value="90">Last 90 days</option>
+        </select>
+    </div>
+
+    <!-- User Comparison -->
+    <div class="bg-white shadow rounded-lg p-6">
+        <h2 class="text-xl font-semibold mb-4">AI vs Traditional User Comparison</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <canvas id="completionRateChart"></canvas>
+            </div>
+            <div>
+                <canvas id="engagementRateChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Activity -->
+    <div class="bg-white shadow rounded-lg p-6">
+        <h2 class="text-xl font-semibold mb-4">User Activity</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="bg-gray-50 p-4 rounded-lg">
+                <h3 class="text-lg font-medium">Active Users</h3>
+                <p class="text-3xl font-bold mt-2" id="activeUsers">-</p>
+            </div>
+            <div class="bg-gray-50 p-4 rounded-lg">
+                <h3 class="text-lg font-medium">At Risk Users</h3>
+                <p class="text-3xl font-bold mt-2" id="atRiskUsers">-</p>
+            </div>
+            <div class="bg-gray-50 p-4 rounded-lg">
+                <h3 class="text-lg font-medium">Dropout Rate</h3>
+                <p class="text-3xl font-bold mt-2" id="dropoutRate">-</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Task Analysis -->
+    <div class="bg-white shadow rounded-lg p-6">
+        <h2 class="text-xl font-semibold mb-4">Task Analysis</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <canvas id="taskStatusChart"></canvas>
+            </div>
+            <div>
+                <canvas id="taskCategoriesChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Conversation Themes -->
+    <div class="bg-white shadow rounded-lg p-6">
+        <h2 class="text-xl font-semibold mb-4">Conversation Themes</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <h3 class="text-lg font-medium mb-3">Common Struggles</h3>
+                <div id="commonStruggles" class="space-y-2"></div>
+            </div>
+            <div>
+                <h3 class="text-lg font-medium mb-3">Common Tasks</h3>
+                <div id="commonTasks" class="space-y-2"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Function to fetch analytics data
+    async function fetchAnalytics(days) {
+        try {
+            const response = await fetch(`/admin/analytics?days=${days}`);
+            const data = await response.json();
+            return data.analytics;
+        } catch (error) {
+            console.error('Error fetching analytics:', error);
+            return null;
+        }
+    }
+
+    // Function to update charts and metrics
+    async function updateAnalytics() {
+        const days = document.getElementById('timeRange').value;
+        const data = await fetchAnalytics(days);
+        
+        if (!data) return;
+
+        // Update user activity metrics
+        document.getElementById('activeUsers').textContent = data.global_metrics.users.total;
+        document.getElementById('atRiskUsers').textContent = data.global_metrics.users.at_risk;
+        document.getElementById('dropoutRate').textContent = `${data.global_metrics.users.dropout_rate.toFixed(1)}%`;
+
+        // Update charts
+        updateCompletionRateChart(data);
+        updateEngagementRateChart(data);
+        updateTaskStatusChart(data);
+        updateTaskCategoriesChart(data);
+        updateThemes(data);
+    }
+
+    // Initialize charts and set up event listeners
+    document.addEventListener('DOMContentLoaded', () => {
+        // Set up time range change handler
+        document.getElementById('timeRange').addEventListener('change', updateAnalytics);
+        
+        // Initial load
+        updateAnalytics();
+    });
+
+    // Chart update functions
+    function updateCompletionRateChart(data) {
+        const ctx = document.getElementById('completionRateChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['AI Users', 'Traditional Users'],
+                datasets: [{
+                    label: 'Task Completion Rate',
+                    data: [
+                        data.global_metrics.tasks.completion_rate,
+                        data.global_metrics.tasks.completion_rate
+                    ],
+                    backgroundColor: ['rgba(99, 102, 241, 0.5)', 'rgba(45, 212, 191, 0.5)']
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Task Completion Rate Comparison'
+                    }
+                }
+            }
+        });
+    }
+
+    function updateEngagementRateChart(data) {
+        // Similar implementation for engagement rate chart
+    }
+
+    function updateTaskStatusChart(data) {
+        // Implementation for task status chart
+    }
+
+    function updateTaskCategoriesChart(data) {
+        // Implementation for task categories chart
+    }
+
+    function updateThemes(data) {
+        // Update common struggles
+        const strugglesDiv = document.getElementById('commonStruggles');
+        strugglesDiv.innerHTML = data.conversation_themes.global_struggles
+            .map(([theme, count]) => `
+                <div class="flex justify-between items-center">
+                    <span class="text-sm font-medium">${theme}</span>
+                    <span class="text-sm text-gray-500">${count}</span>
+                </div>
+            `).join('');
+
+        // Update common tasks
+        const tasksDiv = document.getElementById('commonTasks');
+        tasksDiv.innerHTML = data.conversation_themes.global_tasks
+            .map(([theme, count]) => `
+                <div class="flex justify-between items-center">
+                    <span class="text-sm font-medium">${theme}</span>
+                    <span class="text-sm text-gray-500">${count}</span>
+                </div>
+            `).join('');
+    }
+</script>
+{% endblock %} 

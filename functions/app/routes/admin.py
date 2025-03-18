@@ -133,7 +133,7 @@ def calculate_task_completion_rate(db, users, since_date):
     completed_tasks = 0
     
     for user in users:
-        tasks_ref = db.collection('tasks').where('user_id', '==', user['user_id']).where('created_at', '>=', since_date).stream()
+        tasks_ref = db.collection('tasks').where('user_id', '==', user['id']).where('created_at', '>=', since_date).stream()
         for task in tasks_ref:
             task_data = task.to_dict()
             total_tasks += 1
@@ -150,7 +150,7 @@ def calculate_engagement_rate(db, users, since_date):
     for user in users:
         # Check for any task updates, messages, or interactions
         interactions = (
-            db.collection('tasks').where('user_id', '==', user['user_id'])
+            db.collection('tasks').where('user_id', '==', user['id'])
             .where('updated_at', '>=', since_date)
             .limit(1)
             .stream()
@@ -161,7 +161,7 @@ def calculate_engagement_rate(db, users, since_date):
             continue
         
         messages = (
-            db.collection('messages').where('user_id', '==', user['user_id'])
+            db.collection('messages').where('user_id', '==', user['id'])
             .where('timestamp', '>=', since_date)
             .limit(1)
             .stream()
@@ -180,7 +180,7 @@ def calculate_average_sentiment(db, users, since_date):
     for user in users:
         messages = (
             db.collection('messages')
-            .where('user_id', '==', user['user_id'])
+            .where('user_id', '==', user['id'])
             .where('timestamp', '>=', since_date)
             .where('sentiment_score', '>', 0)
             .stream()

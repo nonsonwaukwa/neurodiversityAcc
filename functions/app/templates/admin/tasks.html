@@ -1,0 +1,195 @@
+{% extends "admin/layout.html" %}
+
+{% block header %}Tasks{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Filters -->
+    <div class="bg-white shadow rounded-lg p-6">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label for="status" class="block text-sm font-medium text-gray-700">Status</label>
+                <select id="status" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                    <option value="">All</option>
+                    <option value="pending">Pending</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                    <option value="stuck">Stuck</option>
+                </select>
+            </div>
+            <div>
+                <label for="user" class="block text-sm font-medium text-gray-700">User</label>
+                <select id="user" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                    <option value="">All Users</option>
+                </select>
+            </div>
+            <div>
+                <label for="dateRange" class="block text-sm font-medium text-gray-700">Date Range</label>
+                <select id="dateRange" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                    <option value="7">Last 7 days</option>
+                    <option value="30" selected>Last 30 days</option>
+                    <option value="90">Last 90 days</option>
+                    <option value="all">All time</option>
+                </select>
+            </div>
+            <div>
+                <label for="type" class="block text-sm font-medium text-gray-700">User Type</label>
+                <select id="type" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                    <option value="">All Types</option>
+                    <option value="ai">AI Tracked</option>
+                    <option value="traditional">Traditional</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tasks List -->
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        <div class="p-6 border-b border-gray-200">
+            <h2 class="text-xl font-semibold">Tasks</h2>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="tasksList" class="bg-white divide-y divide-gray-200">
+                    <!-- Tasks will be populated here -->
+                </tbody>
+            </table>
+        </div>
+        <div id="loading" class="p-6 text-center hidden">
+            Loading tasks...
+        </div>
+        <div id="noTasks" class="p-6 text-center hidden">
+            No tasks found matching the current filters.
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Function to format dates
+    function formatDate(date) {
+        return new Date(date).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
+    }
+
+    // Function to get status badge class
+    function getStatusBadgeClass(status) {
+        const classes = {
+            'pending': 'bg-yellow-100 text-yellow-800',
+            'in_progress': 'bg-blue-100 text-blue-800',
+            'completed': 'bg-green-100 text-green-800',
+            'stuck': 'bg-red-100 text-red-800'
+        };
+        return classes[status] || 'bg-gray-100 text-gray-800';
+    }
+
+    // Function to fetch tasks
+    async function fetchTasks() {
+        const status = document.getElementById('status').value;
+        const userId = document.getElementById('user').value;
+        const days = document.getElementById('dateRange').value;
+        const userType = document.getElementById('type').value;
+
+        const params = new URLSearchParams();
+        if (status) params.append('status', status);
+        if (userId) params.append('user_id', userId);
+        if (days !== 'all') params.append('days', days);
+        if (userType) params.append('user_type', userType);
+
+        try {
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('tasksList').classList.add('hidden');
+            document.getElementById('noTasks').classList.add('hidden');
+
+            const response = await fetch(`/admin/tasks?${params.toString()}`);
+            const data = await response.json();
+
+            if (!data.tasks || data.tasks.length === 0) {
+                document.getElementById('noTasks').classList.remove('hidden');
+                return;
+            }
+
+            const tasksList = document.getElementById('tasksList');
+            tasksList.innerHTML = data.tasks.map(task => `
+                <tr>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="text-sm font-medium text-gray-900">${task.user_name}</div>
+                        <div class="text-sm text-gray-500">${task.user_type}</div>
+                    </td>
+                    <td class="px-6 py-4">
+                        <div class="text-sm text-gray-900">${task.description}</div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadgeClass(task.status)}">
+                            ${task.status}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        ${formatDate(task.created_at)}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        ${task.scheduled_date ? formatDate(task.scheduled_date) : '-'}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button onclick="editTask('${task.id}')" class="text-indigo-600 hover:text-indigo-900">Edit</button>
+                    </td>
+                </tr>
+            `).join('');
+
+            tasksList.classList.remove('hidden');
+        } catch (error) {
+            console.error('Error fetching tasks:', error);
+        } finally {
+            document.getElementById('loading').classList.add('hidden');
+        }
+    }
+
+    // Function to fetch users for the dropdown
+    async function fetchUsers() {
+        try {
+            const response = await fetch('/admin/users');
+            const data = await response.json();
+            
+            const userSelect = document.getElementById('user');
+            userSelect.innerHTML = '<option value="">All Users</option>' + 
+                data.users.map(user => `
+                    <option value="${user.id}">${user.name}</option>
+                `).join('');
+        } catch (error) {
+            console.error('Error fetching users:', error);
+        }
+    }
+
+    // Function to edit task
+    async function editTask(taskId) {
+        // Implement task editing functionality
+        console.log('Edit task:', taskId);
+    }
+
+    // Set up event listeners
+    document.addEventListener('DOMContentLoaded', () => {
+        // Fetch initial data
+        fetchUsers();
+        fetchTasks();
+
+        // Set up filter change handlers
+        ['status', 'user', 'dateRange', 'type'].forEach(id => {
+            document.getElementById(id).addEventListener('change', fetchTasks);
+        });
+    });
+</script>
+{% endblock %} 

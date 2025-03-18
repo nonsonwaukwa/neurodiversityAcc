@@ -156,8 +156,10 @@ def calculate_engagement_rate(db, users, since_date):
     for user in users:
         # Check for any task updates, messages, or interactions
         interactions = (
-            db.collection('tasks').where('user_id', '==', user['user_id'])
-            .where('updated_at', '>=', since_date)
+            db.collection('tasks')
+            .where('user_id', '==', user['user_id'])
+            .order_by('updated_at')
+            .start_at({'updated_at': since_date})
             .limit(1)
             .stream()
         )
@@ -167,8 +169,10 @@ def calculate_engagement_rate(db, users, since_date):
             continue
         
         messages = (
-            db.collection('messages').where('user_id', '==', user['user_id'])
-            .where('timestamp', '>=', since_date)
+            db.collection('messages')
+            .where('user_id', '==', user['user_id'])
+            .order_by('timestamp')
+            .start_at({'timestamp': since_date})
             .limit(1)
             .stream()
         )

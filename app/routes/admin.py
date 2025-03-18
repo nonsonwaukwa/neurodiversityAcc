@@ -262,7 +262,10 @@ def users():
     
     for user_doc in users_ref:
         user_data = user_doc.to_dict()
-        user_data['id'] = user_doc.id
+        user_data['id'] = user_doc.id  # Add document ID
+        user_data['phone'] = user_data.get('user_id')  # WhatsApp number is stored in user_id
+        user_data['active'] = (datetime.utcnow() - user_data.get('last_active', datetime.min).replace(tzinfo=None)).days < 7 if user_data.get('last_active') else False
+        user_data['created_at'] = user_data.get('created_at', user_data.get('last_active'))
         users_data.append(user_data)
     
     return render_template('admin/users.html', users=users_data)

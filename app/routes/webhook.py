@@ -11,7 +11,7 @@ from app.services.message_handler import MessageHandler
 from app.services.voice import get_voice_service
 from app.services.sentiment import get_sentiment_service
 from app.cron.daily_checkin import process_daily_response
-from app.models.message import is_duplicate_message
+from app.models.message import is_duplicate_message, record_message
 from app.tools.voice_monitor import get_voice_monitor
 import random
 from datetime import datetime
@@ -71,8 +71,11 @@ def whatsapp_webhook():
         
         # Check for duplicate messages first
         if is_duplicate_message(message_id):
-            logger.info(f"Skipping duplicate message {message_id} from {from_number}")
-            return jsonify({"status": "success", "message": "Duplicate message skipped"}), 200
+            logger.info(f"Duplicate message detected: {message_id}")
+            return jsonify({"status": "success", "message": "Duplicate message ignored"}), 200
+        
+        # Record this message
+        record_message(message_id)
         
         # Log message details after duplicate check
         logger.info("----------------------------------------")
@@ -241,24 +244,4 @@ def whatsapp_webhook():
         
     except Exception as e:
         logger.error(f"Error in webhook: {str(e)}")
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-def is_duplicate_message(message_id):
-    """Check if a message has been processed before"""
-    try:
-        db = get_db()
-        doc = db.collection('processed_messages').document(message_id).get()
-        return doc.exists
-    except Exception as e:
-        logger.error(f"Error checking duplicate message: {e}")
-        return False
-
-def record_message(message_id):
-    """Record a message as processed"""
-    try:
-        db = get_db()
-        db.collection('processed_messages').document(message_id).set({
-            'timestamp': firestore.SERVER_TIMESTAMP
-        })
-    except Exception as e:
-        logger.error(f"Error recording message: {e}") 
+        return jsonify({"status": "error", "message": str(e)}), 500 

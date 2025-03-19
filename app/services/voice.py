@@ -113,12 +113,19 @@ class VoiceTranscriptionService:
                 "Content-Type": mime_type
             }
             
-            # Prepare query parameters
+            # Prepare query parameters with enhanced accuracy options
             params = {
-                "model": "general",
+                # Use Nova-2 model for better accuracy than general
+                "model": "nova-2",
                 "language": "en-US",
                 "smart_format": "true",
-                "punctuate": "true"
+                "punctuate": "true",
+                "diarize": "false",  # Set to true if needed for multiple speakers
+                "filler_words": "false",  # Excludes um, uh, etc.
+                "utterances": "false",
+                # Additional parameters for improved accuracy
+                "tier": "enhanced",  # Use enhanced tier for better accuracy
+                "detect_topics": "true",  # Help with contextual understanding
             }
             
             # Make the API request
@@ -139,6 +146,20 @@ class VoiceTranscriptionService:
                 
                 if transcript:
                     logger.info("Transcription successful")
+                    
+                    # Log additional information for debugging/improvement
+                    try:
+                        confidence = result.get('results', {}).get('channels', [{}])[0].get('alternatives', [{}])[0].get('confidence')
+                        if confidence:
+                            logger.info(f"Transcription confidence: {confidence}")
+                        
+                        # Log detected topics if available
+                        topics = result.get('results', {}).get('topics')
+                        if topics:
+                            logger.info(f"Detected topics: {topics}")
+                    except Exception as e:
+                        logger.warning(f"Error extracting additional info: {e}")
+                    
                     return True, transcript
                 else:
                     logger.warning("No transcript found in response")

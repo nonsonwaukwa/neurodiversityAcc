@@ -18,7 +18,8 @@ class User:
     def __init__(self, user_id, name, role='user', account_index=0, planning_type='daily',
                  last_active=None, sentiment_history=None, task_needs_followup=None,
                  streak_count=0, last_streak_date=None, current_hack=None,
-                 tracking_type=TRACKING_TYPE_AI, input_method=INPUT_METHOD_WHATSAPP):
+                 tracking_type=TRACKING_TYPE_AI, input_method=INPUT_METHOD_WHATSAPP,
+                 metadata=None):
         """
         Initialize a user
         
@@ -36,6 +37,7 @@ class User:
             current_hack (dict): Current ADHD hack being tried
             tracking_type (str): Whether user is tracked via AI or human input
             input_method (str): How the user was created (WhatsApp or back office)
+            metadata (dict): Additional metadata for the user (e.g., last transcription)
         """
         self.user_id = user_id
         self.name = name
@@ -50,6 +52,7 @@ class User:
         self.current_hack = current_hack
         self.tracking_type = tracking_type
         self.input_method = input_method
+        self.metadata = metadata or {}
     
     def to_dict(self):
         """Convert the user to a dictionary"""
@@ -66,7 +69,8 @@ class User:
             'last_streak_date': self.last_streak_date,
             'current_hack': self.current_hack,
             'tracking_type': self.tracking_type,
-            'input_method': self.input_method
+            'input_method': self.input_method,
+            'metadata': self.metadata
         }
     
     @classmethod
@@ -85,7 +89,8 @@ class User:
             last_streak_date=data.get('last_streak_date'),
             current_hack=data.get('current_hack'),
             tracking_type=data.get('tracking_type', cls.TRACKING_TYPE_AI),
-            input_method=data.get('input_method', cls.INPUT_METHOD_WHATSAPP)
+            input_method=data.get('input_method', cls.INPUT_METHOD_WHATSAPP),
+            metadata=data.get('metadata', {})
         )
     
     @classmethod
@@ -288,3 +293,27 @@ class User:
             user_id=user_id,
             name=name or f"User {user_id[-4:]}"  # Use last 4 digits if no name
         ) 
+
+    def get_metadata(self, key, default=None):
+        """
+        Get a metadata value by key
+        
+        Args:
+            key (str): The metadata key
+            default: Default value if key not found
+            
+        Returns:
+            The metadata value, or default if not found
+        """
+        return self.metadata.get(key, default)
+    
+    def set_metadata(self, key, value):
+        """
+        Set a metadata value
+        
+        Args:
+            key (str): The metadata key
+            value: The value to set
+        """
+        self.metadata[key] = value
+        self.update() 

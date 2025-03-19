@@ -12,7 +12,9 @@ from app.services.voice import get_voice_service
 from app.services.sentiment import get_sentiment_service
 from app.cron.daily_checkin import process_daily_response
 from app.models.message import is_duplicate_message
+from app.tools.voice_monitor import get_voice_monitor
 import random
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +116,19 @@ def whatsapp_webhook():
             # Handle voice notes
             audio = message.get('audio', {})
             audio_url = audio.get('url')
-            logger.info(f"Received voice note: {audio_url}")
+            audio_duration = audio.get('duration', 0)  # Duration in seconds if available
+            logger.info(f"Received voice note: {audio_url}, Duration: {audio_duration}s")
+            
+            # Get voice monitor for logging
+            voice_monitor = get_voice_monitor()
+            
+            # Check if the voice note is too long (over 2 minutes)
+            if audio_duration and audio_duration > 120:
+                logger.warning(f"Voice note is too long: {audio_duration}s")
+                whatsapp_service.send_message(
+                    from_number, 
+                    "I noticed your voice note is quite long. For better transcription accuracy, please try to keep voice notes under 2 minutes."
+                )
             
             if audio_url:
                 # Transcribe the voice note
@@ -125,15 +139,49 @@ def whatsapp_webhook():
                     logger.info(f"Transcribed voice note: {message_text}")
                     is_voice_note = True
                     
-                    # Send a confirmation of the transcription
-                    confirmation = f"✓ I heard: \"{message_text}\""
+                    # Store the transcription in user metadata for later feedback
+                    user.set_metadata('last_transcription', message_text)
+                    user.set_metadata('last_transcription_timestamp', datetime.now().isoformat())
+                    
+                    # Log successful transcription
+                    voice_monitor.log_transcription(
+                        user_id=from_number,
+                        transcription=message_text,
+                        success=True
+                    )
+                    
+                    # Check for very short transcriptions that might indicate an issue
+                    if len(message_text.split()) < 3:
+                        logger.warning(f"Very short transcription: '{message_text}'")
+                        # Send confirmation but with a hint that it might not be accurate
+                        confirmation = f"✓ I heard: \"{message_text}\"\n\nIf this doesn't look right, you could try speaking a bit louder or in a quieter environment."
+                    else:
+                        # Normal confirmation
+                        confirmation = f"✓ I heard: \"{message_text}\""
+                    
                     whatsapp_service.send_message(from_number, confirmation)
+                    
+                    # Occasionally ask for feedback on transcription accuracy
+                    if random.random() < 0.1:  # 10% chance
+                        feedback_message = (
+                            "Was the transcription accurate?\n\n"
+                            "Reply with 'yes' if accurate, 'no' if inaccurate, or ignore this message."
+                        )
+                        whatsapp_service.send_message(from_number, feedback_message)
                 else:
                     # Failed to transcribe
                     logger.error("Failed to transcribe voice note")
+                    
+                    # Log failed transcription
+                    voice_monitor.log_transcription(
+                        user_id=from_number,
+                        transcription=None,
+                        success=False
+                    )
+                    
                     whatsapp_service.send_message(
                         from_number, 
-                        "I couldn't understand your voice note. Could you please try again or send a text message?"
+                        "I couldn't understand your voice note. This might be due to background noise or audio quality. Could you please try again in a quieter environment, speak clearly, or send a text message instead?"
                     )
                     return jsonify({"status": "error", "message": "Voice transcription failed"}), 200
         
@@ -164,6 +212,30 @@ def whatsapp_webhook():
         if is_voice_note and random.random() < 0.3:  # Only remind occasionally (30% chance)
             reminder = "💡 Remember, you can always send voice notes for your check-ins! It's a convenient way to share how you're feeling."
             whatsapp_service.send_message(from_number, reminder)
+        
+        # Add a message handler for transcription feedback
+        if message_handler.is_transcription_feedback(message_text):
+            # Get the last transcription for this user
+            # This is a simplified approach - in production you might need to store the last transcription per user
+            last_transcription = user.get_metadata('last_transcription')
+            
+            if last_transcription:
+                feedback = 'accurate' if message_text.lower() in ['yes', 'y', 'correct', 'accurate'] else 'inaccurate'
+                
+                # Log the feedback
+                voice_monitor = get_voice_monitor()
+                voice_monitor.log_user_feedback(
+                    user_id=from_number,
+                    transcription=last_transcription,
+                    feedback=feedback
+                )
+                
+                # Thank the user for feedback
+                whatsapp_service.send_message(
+                    from_number,
+                    "Thank you for the feedback! It helps us improve our voice recognition."
+                )
+                return jsonify({"status": "success", "message": "Feedback processed"}), 200
         
         return jsonify({"status": "success", "message": "Message processed"}), 200
         

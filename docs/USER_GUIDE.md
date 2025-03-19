@@ -315,4 +315,37 @@ The Neurodiversity Accountability System now supports voice notes for check-ins 
 - Speak clearly and at a moderate pace
 - Try to minimize background noise for better transcription
 - If transcription misses something important, you can always follow up with text
-- Voice notes work for all system features, including check-ins, task updates, and requests for help 
+- Voice notes work for all system features, including check-ins, task updates, and requests for help
+
+### Best Practices for Accurate Transcription
+
+For the best transcription accuracy when using voice notes:
+
+1. **Recording Environment**:
+   - Find a quiet location with minimal background noise
+   - Avoid areas with echoes or reverberations
+   - Reduce environmental sounds like fans, air conditioners, or traffic
+
+2. **Speaking Technique**:
+   - Speak clearly and at a moderate pace - not too fast or too slow
+   - Enunciate words, especially at the beginning and end of sentences
+   - Keep the phone microphone about 6-8 inches from your mouth
+   - Avoid covering the microphone with your hand or clothing
+
+3. **Content Considerations**:
+   - Start with a brief pause before speaking
+   - Use complete sentences rather than single words when possible
+   - For task updates, clearly state the task number and status
+   - Speak more deliberately when using specific commands
+
+4. **Length and Structure**:
+   - Keep voice notes under 2 minutes for best results
+   - Use shorter, focused messages rather than long monologues
+   - Pause briefly between distinct thoughts or topics
+
+5. **Follow-up Options**:
+   - Check the transcription confirmation to verify accuracy
+   - If the transcription is incorrect, you can try again or switch to text
+   - For critical updates, you might want to confirm with text
+
+Remember that the transcription system will improve over time as we enhance our speech recognition capabilities. Your patience as we improve this feature is greatly appreciated! 

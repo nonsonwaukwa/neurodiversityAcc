@@ -16,6 +16,9 @@ class MessageHandler:
     TASK_DONE_PATTERN = r"^(?:✅\s*)?(?:done|complete|finished)\s+(\d+)$"
     TASK_PROGRESS_PATTERN = r"^(?:🔄\s*)?(?:progress|doing|working|started)\s+(\d+)$"
     TASK_STUCK_PATTERN = r"^(?:❌\s*)?(?:stuck|help|blocked)\s+(\d+)$"
+    
+    # Transcription feedback patterns
+    TRANSCRIPTION_FEEDBACK_PATTERN = r"^(?:yes|no|y|n|correct|incorrect|accurate|inaccurate)$"
 
     @staticmethod
     def handle_task_update(user, message_text):
@@ -196,6 +199,26 @@ class MessageHandler:
         message += "STUCK [number] - Let me know this feels challenging"
         
         whatsapp_service.send_message(user.user_id, message)
+    
+    @staticmethod
+    def is_transcription_feedback(message_text):
+        """
+        Check if a message is feedback on a voice transcription
+        
+        Args:
+            message_text (str): The message text
+            
+        Returns:
+            bool: Whether the message is transcription feedback
+        """
+        if not message_text:
+            return False
+            
+        # Clean and normalize the text
+        message = message_text.strip().lower()
+        
+        # Check if it matches feedback pattern
+        return bool(re.match(MessageHandler.TRANSCRIPTION_FEEDBACK_PATTERN, message, re.IGNORECASE))
     
     @staticmethod
     def handle_message(user, message_text):

@@ -57,4 +57,15 @@ def run_weekly_progress_reports():
         import logging
         logger = logging.getLogger(__name__)
         logger.error(f"Missing dependency for weekly progress reports: {e}")
-        logger.error("Please install the optional dependencies listed in requirements.txt") 
+        logger.error("Please install the optional dependencies listed in requirements.txt")
+
+@app.cli.command('run-followup-reminders')
+def run_followup_reminders():
+    """Run the follow-up reminders cron job"""
+    try:
+        from app.cron.reminders import send_checkin_reminders
+        send_checkin_reminders()
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error running follow-up reminders: {e}") 

@@ -7,7 +7,8 @@
 4. [Task Management](#task-management)
 5. [Progress Tracking](#progress-tracking)
 6. [Support Features](#support-features)
-7. [Commands Reference](#commands-reference)
+7. [Interactive Buttons](#interactive-buttons)
+8. [Commands Reference](#commands-reference)
 
 ## Introduction
 
@@ -44,10 +45,29 @@ Based on your check-in response, the system will:
    - Offer task prioritization
 
 2. **Overwhelmed/Negative Mood**:
-   - Offer simplified options
+   - Offer simplified options with interactive buttons (One small task, Rest today)
    - Suggest breaking down tasks
    - Provide emotional support
    - Option to take a rest day
+
+### Follow-up Reminders
+If you miss your daily check-in, the system will send neurodivergent-friendly follow-ups:
+
+1. **Morning Follow-up** (2 hours after initial check-in):
+   - Gentle reminder with no pressure
+   - Options to plan your day, do a quick check-in, or be reminded later
+
+2. **Mid-day Follow-up** (4 hours after initial check-in):
+   - Reminder that the day is still young
+   - Options to plan your afternoon, focus on self-care, or just chat
+
+3. **Evening Follow-up** (8 hours after initial check-in):
+   - Self-care tip and gentle reset message
+   - Options to share about your day, plan tomorrow, or rest
+
+4. **Next-day Support** (after 24+ hours):
+   - Empathetic message acknowledging it's okay to need space
+   - Options for a fresh start, gentle check-in, or getting support
 
 ## Task Management
 
@@ -78,25 +98,21 @@ STUCK [number] - Mark as stuck
 ```
 
 ### Updating Task Status
-You can update tasks anytime using these commands (case-insensitive):
+You can update tasks in two ways:
 
-1. **Mark as Complete**:
-   - `done [number]`
-   - `complete [number]`
-   - `finished [number]`
-   
-2. **Mark as In Progress**:
-   - `progress [number]`
-   - `doing [number]`
-   - `working [number]`
-   - `started [number]`
-   
-3. **Mark as Stuck**:
-   - `stuck [number]`
-   - `help [number]`
-   - `blocked [number]`
+1. **Using Text Commands** (case-insensitive):
+   - **Mark as Complete**: `done [number]`, `complete [number]`, `finished [number]`
+   - **Mark as In Progress**: `progress [number]`, `doing [number]`, `working [number]`, `started [number]`
+   - **Mark as Stuck**: `stuck [number]`, `help [number]`, `blocked [number]`
 
-Example: `done 1` marks task #1 as complete
+2. **Using Interactive Buttons**:
+   - When you receive a task status update request, you'll see buttons:
+     - ✅ Done
+     - 🔄 In Progress
+     - ❌ Stuck
+   - Simply tap the button to update your task status
+
+Example: `done 1` marks task #1 as complete, or tap the "✅ Done" button when prompted
 
 ### Task Status Indicators
 - ⏳ Pending tasks
@@ -136,8 +152,13 @@ When marking a task as stuck:
 
 2. **Overwhelm Detection**:
    - Automatic adjustment of task load
-   - Offer of simplified options
+   - Offer of simplified options via interactive buttons
    - Rest day suggestions
+
+3. **Help When Stuck**:
+   - Interactive support options
+   - Specific help strategies
+   - Simplification suggestions
 
 ### Task Assistance
 1. **When Stuck**:
@@ -150,6 +171,46 @@ When marking a task as stuck:
    - Regular check-ins
    - Encouraging messages
    - Celebration of progress
+
+## Interactive Buttons
+
+The system uses WhatsApp interactive buttons to make interactions easier for neurodivergent users, reducing decision fatigue and cognitive load.
+
+### When You'll See Buttons
+
+1. **During Check-ins**:
+   - When you're feeling overwhelmed (One small task, Rest today)
+   - When selecting which task to focus on
+   - When you need additional support
+
+2. **For Task Updates**:
+   - Update task status (Done, In Progress, Stuck)
+   - Celebrate task completion
+   - Get help with stuck tasks
+
+3. **During Follow-ups**:
+   - If you miss your daily check-in
+   - Gentle reminders throughout the day
+   - Next-day support options
+
+4. **For Support Features**:
+   - Getting ADHD strategies (Try Another, This Helped, Break Down Task)
+   - Simplifying overwhelming tasks
+   - Planning options (Today, Tomorrow)
+
+### How to Use Buttons
+
+1. When buttons appear, simply tap on your preferred option
+2. The system will process your selection immediately
+3. You'll receive a follow-up response based on your choice
+4. If buttons don't work, you can still type your response
+
+### Button Types
+
+- **Task Management**: Status updates, selection, prioritization
+- **Planning Options**: Day planning, single task focus, rest day
+- **Support Options**: Help strategies, simplification, guidance
+- **Follow-up Options**: Different response types based on time of day
 
 ## Commands Reference
 

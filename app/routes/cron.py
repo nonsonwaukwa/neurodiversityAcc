@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify, current_app
 from app.cron.daily_checkin import send_daily_checkin
 from app.cron.daily_tasks import send_daily_tasks
 from app.cron.weekly_checkin import send_weekly_checkin
+from app.cron.reminders import send_checkin_reminders
 import os
 import logging
 
@@ -74,4 +75,29 @@ def weekly_checkin_webhook():
         return jsonify({"status": "success", "message": "Weekly check-in completed"}), 200
     except Exception as e:
         logger.error(f"Error in weekly check-in webhook: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@cron_bp.route('/cron/followup-reminders', methods=['POST'])
+def followup_reminders_webhook():
+    """Handle the follow-up reminders cron job webhook."""
+    logger.info("Received follow-up reminders webhook request")
+    
+    # Verify the cron secret
+    if not verify_cron_secret():
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    try:
+        # Get the reminder type from the request payload
+        data = request.get_json() or {}
+        reminder_type = data.get('reminder_type')
+        
+        if reminder_type:
+            logger.info(f"Handling {reminder_type} follow-up reminders")
+        
+        # Run the follow-up reminders with the specified type
+        send_checkin_reminders(reminder_type=reminder_type)
+        
+        return jsonify({"status": "success", "message": f"Follow-up reminders completed for type: {reminder_type or 'all'}"}), 200
+    except Exception as e:
+        logger.error(f"Error in follow-up reminders webhook: {str(e)}")
         return jsonify({"error": str(e)}), 500 

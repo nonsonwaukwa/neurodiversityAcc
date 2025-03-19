@@ -10,6 +10,7 @@ A WhatsApp-based accountability system designed to help neurodivergent individua
 - **Weekly Mental Health Check-ins**: Regular monitoring of users' mental well-being
 - **Adaptive Responses**: System responses adapt based on user sentiment
 - **Custom ADHD Strategies**: Provides tailored strategies to help overcome executive dysfunction
+- **Voice Note Support**: Submit check-ins and updates via voice notes, which are automatically transcribed and processed, enhancing accessibility for neurodivergent users
 
 ## System Architecture
 

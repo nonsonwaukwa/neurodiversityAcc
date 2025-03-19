@@ -1,39 +1,96 @@
 import os
 import logging
-from deepgram import Deepgram
-import aiohttp
+import requests
 import asyncio
+import json
 from typing import Optional, Tuple
+from dotenv import load_dotenv
+import io
 
+# Load environment variables
+load_dotenv()
+
+# Set up logger
 logger = logging.getLogger(__name__)
 
 class VoiceTranscriptionService:
+    """Service for transcribing voice messages using Deepgram API"""
+    
     def __init__(self):
-        self.deepgram = None
-        self.api_key = os.getenv('DEEPGRAM_API_KEY')
-        if self.api_key:
-            self.deepgram = Deepgram(self.api_key)
-
-    async def download_audio(self, url: str) -> Optional[bytes]:
-        """Download audio file from URL"""
+        """Initialize the voice transcription service"""
+        self.api_key = os.environ.get('DEEPGRAM_API_KEY')
+        
+        if not self.api_key:
+            logger.warning("DEEPGRAM_API_KEY not found in environment variables!")
+            logger.warning("Voice transcription will not work properly.")
+    
+    async def download_audio(self, audio_url: str) -> Optional[bytes]:
+        """
+        Download audio from a URL
+        
+        Args:
+            audio_url (str): The URL of the audio file
+            
+        Returns:
+            bytes or None: The audio data as bytes
+        """
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url) as response:
-                    if response.status == 200:
-                        return await response.read()
-                    else:
-                        logger.error(f"Failed to download audio: {response.status}")
-                        return None
+            # Add authorization header for WhatsApp API URLs
+            headers = {}
+            if 'graph.facebook.com' in audio_url:
+                # For WhatsApp Cloud API, we need to add the access token
+                access_token = os.environ.get('WHATSAPP_ACCESS_TOKEN')
+                if access_token:
+                    headers['Authorization'] = f'Bearer {access_token}'
+            
+            response = requests.get(audio_url, headers=headers, timeout=30)
+            
+            if response.status_code == 200:
+                return response.content
+            else:
+                logger.error(f"Error downloading audio: {response.status_code} - {response.text}")
+                return None
+                
         except Exception as e:
             logger.error(f"Error downloading audio: {e}")
             return None
 
+    def _get_mime_type(self, file_path_or_url: str) -> str:
+        """
+        Get the MIME type of a file based on its extension
+        
+        Args:
+            file_path_or_url (str): File path or URL
+            
+        Returns:
+            str: MIME type
+        """
+        # Extract extension from file_path_or_url
+        if '.' in file_path_or_url:
+            ext = file_path_or_url.split('.')[-1].lower()
+            if ext == 'mp3':
+                return 'audio/mpeg'
+            elif ext == 'wav':
+                return 'audio/wav'
+            elif ext == 'ogg':
+                return 'audio/ogg'
+            elif ext == 'm4a':
+                return 'audio/m4a'
+        
+        # Default to ogg for WhatsApp audio
+        return 'audio/ogg'
+
     async def transcribe_audio(self, audio_url: str) -> Tuple[bool, Optional[str]]:
         """
-        Transcribe audio using Deepgram
-        Returns: (success, transcription)
+        Transcribe audio using Deepgram API directly
+        
+        Args:
+            audio_url (str): The URL of the audio file
+            
+        Returns:
+            tuple: (success, transcription)
         """
-        if not self.deepgram:
+        if not self.api_key:
             logger.warning("Deepgram API key not configured")
             return False, None
 
@@ -43,24 +100,54 @@ class VoiceTranscriptionService:
             if not audio_data:
                 return False, None
 
-            # Configure Deepgram request
-            source = {'buffer': audio_data, 'mimetype': 'audio/ogg'}
-            options = {
-                'punctuate': True,
-                'model': 'general',
-                'language': 'en-US'
+            # Determine mime type from URL
+            mime_type = self._get_mime_type(audio_url)
+            logger.info(f"Using mime type: {mime_type} for {audio_url}")
+            
+            # Prepare the API endpoint
+            url = "https://api.deepgram.com/v1/listen"
+            
+            # Prepare headers
+            headers = {
+                "Authorization": f"Token {self.api_key}",
+                "Content-Type": mime_type
             }
-
-            # Get response from Deepgram
-            response = await self.deepgram.transcription.prerecorded(source, options)
             
-            # Extract transcript
-            transcript = response['results']['channels'][0]['alternatives'][0]['transcript']
+            # Prepare query parameters
+            params = {
+                "model": "general",
+                "language": "en-US",
+                "smart_format": "true",
+                "punctuate": "true"
+            }
             
-            if not transcript:
-                return False, None
+            # Make the API request
+            logger.info("Sending request to Deepgram API...")
+            
+            response = requests.post(
+                url, 
+                params=params, 
+                headers=headers, 
+                data=audio_data
+            )
+            
+            # Check response status
+            if response.status_code == 200:
+                result = response.json()
+                # Extract the transcript
+                transcript = result.get('results', {}).get('channels', [{}])[0].get('alternatives', [{}])[0].get('transcript')
                 
-            return True, transcript
+                if transcript:
+                    logger.info("Transcription successful")
+                    return True, transcript
+                else:
+                    logger.warning("No transcript found in response")
+                    logger.debug(f"Response: {json.dumps(result, indent=2)}")
+                    return False, None
+            else:
+                logger.error(f"API request failed with status code {response.status_code}")
+                logger.error(f"Response: {response.text}")
+                return False, None
 
         except Exception as e:
             logger.error(f"Error transcribing audio: {e}")
@@ -69,6 +156,12 @@ class VoiceTranscriptionService:
     def process_voice_note(self, audio_url: str) -> Optional[str]:
         """
         Process a voice note and return the transcription
+        
+        Args:
+            audio_url (str): The URL of the audio file
+            
+        Returns:
+            str or None: The transcription text
         """
         try:
             # Run the async transcription in a new event loop
@@ -81,4 +174,19 @@ class VoiceTranscriptionService:
             
         except Exception as e:
             logger.error(f"Error processing voice note: {e}")
-            return None 
+            return None
+
+# Create singleton instance
+_voice_service = None
+
+def get_voice_service():
+    """
+    Get the voice transcription service instance
+    
+    Returns:
+        VoiceTranscriptionService: The voice service instance
+    """
+    global _voice_service
+    if _voice_service is None:
+        _voice_service = VoiceTranscriptionService()
+    return _voice_service 

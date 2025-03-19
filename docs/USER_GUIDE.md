@@ -9,6 +9,7 @@
 6. [Support Features](#support-features)
 7. [Interactive Buttons](#interactive-buttons)
 8. [Commands Reference](#commands-reference)
+9. [Voice Note Support](#voice-note-support)
 
 ## Introduction
 
@@ -279,4 +280,39 @@ The system provides:
 5. Regular encouragement
 6. Achievement tracking
 
-Remember: The system is designed to be flexible and supportive. Use it in the way that works best for you, and don't hesitate to ask for help or take breaks when needed. 
+Remember: The system is designed to be flexible and supportive. Use it in the way that works best for you, and don't hesitate to ask for help or take breaks when needed.
+
+## Voice Note Support
+
+The Neurodiversity Accountability System now supports voice notes for check-ins and updates, making the platform more accessible for those who prefer verbal communication.
+
+### How to Use Voice Notes
+
+1. **Send a Voice Note**:
+   - Press and hold the microphone button in WhatsApp
+   - Record your message
+   - Release to send
+
+2. **When to Use Voice Notes**:
+   - Daily check-ins (express how you're feeling)
+   - Task updates (report progress, ask for help)
+   - Any time you prefer speaking over typing
+
+3. **How It Works**:
+   - Voice notes are automatically transcribed
+   - The system analyzes your message for sentiment and key information
+   - You'll receive the same supportive responses as with text messages
+   
+### Benefits for Neurodivergent Users
+
+- **Reduced Typing Effort**: Helpful when executive function is low
+- **Natural Expression**: Communicate feelings more naturally through voice
+- **Accessibility**: Alternative input method for those with dyslexia or typing difficulties
+- **Flexibility**: Switch between voice and text based on your needs
+
+### Voice Note Tips
+
+- Speak clearly and at a moderate pace
+- Try to minimize background noise for better transcription
+- If transcription misses something important, you can always follow up with text
+- Voice notes work for all system features, including check-ins, task updates, and requests for help 

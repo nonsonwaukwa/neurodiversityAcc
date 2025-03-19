@@ -241,7 +241,13 @@ class WhatsAppService:
                                     message_obj['button_id'] = button_reply.get('id')
                                     message_obj['button_text'] = button_reply.get('title')
                             
-                            # Add other message types as needed (e.g., audio, location)
+                            elif message.get('type') == 'audio':
+                                audio = message.get('audio', {})
+                                message_obj['audio_id'] = audio.get('id')
+                                message_obj['audio_mime_type'] = audio.get('mime_type')
+                                message_obj['audio_url'] = audio.get('url')
+                            
+                            # Add other message types as needed (e.g., location)
                             
                             result['messages'].append(message_obj)
         

@@ -36,7 +36,8 @@ pycparser==2.21
 # msgpack==1.0.7
 
 # Voice processing
-deepgram-sdk>=2.11.0
+# Using requests library directly instead of the SDK
+# Removed: deepgram-sdk>=2.11.0
 aiohttp>=3.8.5
 
 # Functions

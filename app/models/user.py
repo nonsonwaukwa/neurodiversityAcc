@@ -154,6 +154,23 @@ class User:
         
         return users
     
+    @classmethod
+    def get_all_active(cls):
+        """
+        Get all active users (users who have interacted with the system)
+        
+        Returns:
+            list: List of active users
+        """
+        # Get all users first
+        all_users = cls.get_all()
+        
+        # Filter to include only those with a last_active timestamp
+        # We consider any user who has ever been active as "active"
+        active_users = [user for user in all_users if user.last_active is not None]
+        
+        return active_users
+    
     def update(self):
         """Update the user in the database"""
         db = get_db()

@@ -15,7 +15,7 @@ import os
 import logging
 import requests
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import urljoin
 import sys
 
@@ -48,7 +48,7 @@ def trigger_followup_reminders():
     
     # Prepare payload with timestamp and reminder type
     payload = {
-        'timestamp': datetime.utcnow().isoformat(),
+        'timestamp': datetime.now(timezone.UTC).isoformat(),
         'reminder_type': 'morning'  # Indicates this is the morning follow-up
     }
     
@@ -83,7 +83,7 @@ if __name__ == "__main__":
         sys.exit(1)
     
     # Log execution time
-    current_time = datetime.utcnow()
+    current_time = datetime.now(timezone.UTC)
     logger.info(f"Morning follow-up reminders cron job started at {current_time.isoformat()}")
     
     # Trigger the follow-up reminders

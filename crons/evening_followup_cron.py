@@ -48,7 +48,7 @@ def trigger_followup_reminders():
     
     # Prepare payload with timestamp and reminder type
     payload = {
-        'timestamp': datetime.now(timezone.UTC).isoformat(),
+        'timestamp': datetime.now(timezone.utc).isoformat(),
         'reminder_type': 'evening'  # Indicates this is the evening follow-up
     }
     
@@ -83,7 +83,7 @@ if __name__ == "__main__":
         sys.exit(1)
     
     # Log execution time
-    current_time = datetime.now(timezone.UTC)
+    current_time = datetime.now(timezone.utc)
     logger.info(f"Evening follow-up reminders cron job started at {current_time.isoformat()}")
     
     # Trigger the follow-up reminders

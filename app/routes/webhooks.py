@@ -9,7 +9,9 @@ def handle_button_response(user, button_id):
         "plan_afternoon", "self_care", "just_chat",
         "share_day", "plan_tomorrow", "rest_now",
         "fresh_start", "gentle_checkin", "need_help",
-        "simplify_tasks", "just_talk", "get_strategies"
+        "simplify_tasks", "just_talk", "get_strategies",
+        "rest_and_recharge", "tiny_step", "celebrate",
+        "need_support", "adjust_tasks", "explore_options"
     ]
     
     if button_id in reminder_responses:

@@ -77,13 +77,14 @@ def _send_reminder_if_needed(user, whatsapp_service, reminder_type=None):
     # First Follow-up (12:30 PM, 2 hours after check-in)
     if (reminder_type == 'morning' or reminder_type is None) and timedelta(hours=1.5) < time_since_checkin <= timedelta(hours=2.5):
         message = (
-            f"Hey {user.name}! No pressure at all - I'm still here when you're ready to plan your day. "
-            f"Would you like to:"
+            f"Hey {user.name}! 💫 Just a gentle check-in - absolutely no pressure at all. "
+            f"I'm still here whenever you feel ready to connect. "
+            f"If you'd like, you could:"
         )
         buttons = [
             {"id": "plan_day", "title": "Plan my day"},
-            {"id": "quick_checkin", "title": "Quick check-in"},
-            {"id": "remind_later", "title": "Remind me later"}
+            {"id": "quick_checkin", "title": "Quick hello"},
+            {"id": "remind_later", "title": "Not just now"}
         ]
         whatsapp_service.send_interactive_buttons(user.user_id, message, buttons)
         logger.info(f"Sent first follow-up to {user.user_id}")
@@ -91,12 +92,12 @@ def _send_reminder_if_needed(user, whatsapp_service, reminder_type=None):
     # Mid-day Check (2:30 PM, 4 hours after check-in)
     elif (reminder_type == 'midday' or reminder_type is None) and timedelta(hours=3.5) < time_since_checkin <= timedelta(hours=4.5):
         message = (
-            f"Hi {user.name}! The day is still young. "
-            f"Would you like to:"
+            f"Hi {user.name}! 🌤️ The day still holds possibilities, and that's wonderful. "
+            f"If it feels right for you, maybe you'd like to:"
         )
         buttons = [
             {"id": "plan_afternoon", "title": "Plan afternoon"},
-            {"id": "self_care", "title": "Focus on self-care"},
+            {"id": "self_care", "title": "Self-care time"},
             {"id": "just_chat", "title": "Just chat"}
         ]
         whatsapp_service.send_interactive_buttons(user.user_id, message, buttons)
@@ -108,14 +109,15 @@ def _send_reminder_if_needed(user, whatsapp_service, reminder_type=None):
         self_care_tip = task_service.get_self_care_tip()
         
         message = (
-            f"Hey {user.name}! How has your day been? Remember, every day is a fresh start. "
-            f"Here's a gentle self-care reminder: {self_care_tip}\n\n"
-            f"Would you like to:"
+            f"Hey {user.name}! ✨ How has your day unfolded? Remember, each day is its own journey, "
+            f"and tomorrow offers a fresh beginning whenever you need it.\n\n"
+            f"Here's a gentle self-care reminder if it feels helpful: {self_care_tip}\n\n"
+            f"If you'd like, you could:"
         )
         buttons = [
             {"id": "share_day", "title": "Share about today"},
-            {"id": "plan_tomorrow", "title": "Plan tomorrow"},
-            {"id": "rest_now", "title": "Rest now"}
+            {"id": "plan_tomorrow", "title": "Gentle tomorrow plan"},
+            {"id": "rest_now", "title": "Rest & recharge"}
         ]
         whatsapp_service.send_interactive_buttons(user.user_id, message, buttons)
         logger.info(f"Sent evening reset to {user.user_id}")
@@ -124,14 +126,14 @@ def _send_reminder_if_needed(user, whatsapp_service, reminder_type=None):
     # This is handled separately as it's not tied to a specific time of day
     elif time_since_checkin > timedelta(hours=24):
         message = (
-            f"Hi {user.name}, I've noticed we haven't connected in a bit, and that's completely okay! "
-            f"Sometimes we need space, and I'm here whenever you're ready. "
-            f"Would you like to:"
+            f"Hi {user.name} 💖, I've noticed we haven't connected in a little while, and that's completely okay! "
+            f"Sometimes we need space or things get busy, and I'm here with warmth whenever you're ready. "
+            f"No rush at all. If you'd like to reconnect, maybe you'd enjoy:"
         )
         buttons = [
-            {"id": "fresh_start", "title": "Fresh start"},
+            {"id": "fresh_start", "title": "Fresh beginning"},
             {"id": "gentle_checkin", "title": "Just say hi"},
-            {"id": "need_help", "title": "Need support"}
+            {"id": "need_help", "title": "Gentle support"}
         ]
         whatsapp_service.send_interactive_buttons(user.user_id, message, buttons)
         logger.info(f"Sent next-day support message to {user.user_id}")
@@ -150,51 +152,53 @@ def handle_reminder_response(user, response_type):
 
     if response_type == "plan_day":
         if current_hour < 12:  # Morning
-            message = "Let's plan your day! What would you like to focus on today? You can list up to 3 tasks."
+            message = "Let's gently plan your day in a way that feels good to you. What might you like to focus on today? You could share up to 3 things if that feels comfortable, or just 1 is perfectly fine too."
         else:  # Afternoon
-            message = "Let's plan the rest of your day. What's one thing you'd like to accomplish?"
+            message = "Let's think about the rest of your day in a way that feels nurturing. What's one small thing you might like to focus on? Even the tiniest step counts."
         whatsapp_service.send_message(user.user_id, message)
 
     elif response_type == "quick_checkin":
-        message = "How are you feeling right now? Just a quick check-in - no pressure to plan anything."
+        message = "How are you feeling in this moment? This is just a soft check-in - no pressure at all to plan anything. Your wellbeing matters most."
         whatsapp_service.send_message(user.user_id, message)
 
     elif response_type == "remind_later":
-        message = "No problem! I'll check in with you a bit later. Take care!"
+        message = "Of course! I'll give you some space and maybe check in a bit later. Take all the time you need. 💫"
         whatsapp_service.send_message(user.user_id, message)
 
     elif response_type == "self_care":
         self_care_tip = task_service.get_self_care_tip()
-        message = f"Taking care of yourself is important! Here's a suggestion: {self_care_tip}"
+        message = f"Taking care of yourself is so important and something to be proud of. Here's a gentle suggestion if it resonates with you: {self_care_tip} 💝"
         whatsapp_service.send_message(user.user_id, message)
 
     elif response_type == "plan_tomorrow":
         message = (
-            "Let's think about tomorrow. No pressure to plan everything - "
-            "even one small intention for tomorrow can help. What feels manageable?"
+            "Let's think softly about tomorrow. No pressure to plan everything - "
+            "even setting one small, kind intention for tomorrow can be nurturing. "
+            "What might feel manageable and good for you?"
         )
         whatsapp_service.send_message(user.user_id, message)
 
     elif response_type == "fresh_start":
         message = (
-            "Every moment is a chance to start fresh! "
-            "Would you like to plan something small for today, or shall we look ahead to tomorrow?"
+            "Every moment offers a chance for a gentle fresh start! "
+            "Would you like to consider something small for today, or maybe look ahead to tomorrow? "
+            "Whatever feels most nurturing for you right now."
         )
         buttons = [
-            {"id": "plan_today", "title": "Plan today"},
-            {"id": "plan_tomorrow", "title": "Plan tomorrow"}
+            {"id": "plan_today", "title": "Something for today"},
+            {"id": "plan_tomorrow", "title": "Think about tomorrow"}
         ]
         whatsapp_service.send_interactive_buttons(user.user_id, message, buttons)
 
     elif response_type == "need_help":
         message = (
-            "I'm here to support you. Sometimes things get overwhelming, and that's okay. "
-            "Would you like to:"
+            "I'm here with you with warmth and care. Sometimes things feel overwhelming, and that's completely understandable. "
+            "Would any of these feel supportive right now?"
         )
         buttons = [
-            {"id": "simplify_tasks", "title": "Simplify tasks"},
-            {"id": "just_talk", "title": "Just talk"},
-            {"id": "get_strategies", "title": "Get strategies"}
+            {"id": "simplify_tasks", "title": "Simplify things"},
+            {"id": "just_talk", "title": "Just chat"},
+            {"id": "get_strategies", "title": "Gentle strategies"}
         ]
         whatsapp_service.send_interactive_buttons(user.user_id, message, buttons)
 

@@ -99,22 +99,22 @@ class MessageHandler:
                     'task_completion'
                 )
                 
-                response = f"🎉 Great job completing: {task.description}"
+                response = f"🌟 That's wonderful! You completed: {task.description}\nEven small steps are meaningful progress - this is something to celebrate."
                 
             elif new_status == Task.STATUS_IN_PROGRESS:
-                response = f"👍 Marked as in progress: {task.description}"
+                response = f"💫 I've noted you're working on: {task.description}\nStarting is often the hardest part - I appreciate your effort."
                 
             else:  # STUCK
                 response = (
-                    f"I understand you're stuck with: {task.description}\n\n"
-                    "Would you like to:"
+                    f"I hear that you're finding '{task.description}' challenging, and that's completely okay and normal.\n\n"
+                    "Would you like to explore any of these gentle options:"
                 )
                 
                 # Offer help options
                 buttons = [
-                    {"id": "break_down", "title": "Break it down"},
-                    {"id": "modify_task", "title": "Modify task"},
-                    {"id": "get_help", "title": "Get help"}
+                    {"id": "break_down", "title": "Break into smaller steps"},
+                    {"id": "modify_task", "title": "Adjust the task"},
+                    {"id": "get_help", "title": "Explore support options"}
                 ]
                 
                 whatsapp_service.send_interactive_buttons(user.user_id, response, buttons)
@@ -131,13 +131,13 @@ class MessageHandler:
                 
                 if not remaining_tasks:
                     celebration = (
-                        "🎊 Wow! You've completed all your tasks for today!\n"
-                        "Take a moment to celebrate this achievement. Would you like to:"
+                        "✨ What a beautiful moment! You've completed all the intentions you set.\n"
+                        "This is truly something to celebrate and honor. Your effort matters, regardless of how small the tasks may have seemed. Would you like to:"
                     )
                     
                     buttons = [
-                        {"id": "add_more_tasks", "title": "Add more tasks"},
-                        {"id": "done_for_today", "title": "Done for today"}
+                        {"id": "add_more_tasks", "title": "Add a new intention"},
+                        {"id": "done_for_today", "title": "Rest & celebrate"}
                     ]
                     
                     whatsapp_service.send_interactive_buttons(user.user_id, celebration, buttons)
@@ -148,7 +148,7 @@ class MessageHandler:
             logger.error(f"Error processing task update for user {user.user_id}: {e}")
             whatsapp_service.send_message(
                 user.user_id,
-                "Sorry, I couldn't process that task update. Please try again or contact support if the problem persists."
+                "I'm sorry, I couldn't process that update. This is on my end, not yours. Could we try that again in a slightly different way?"
             )
             return True
     
@@ -172,7 +172,7 @@ class MessageHandler:
         if not tasks:
             whatsapp_service.send_message(
                 user.user_id,
-                "You don't have any active tasks. Would you like to add some?"
+                "You don't have any active intentions at the moment, which is perfectly okay. Would you like to add something small that might feel nurturing or helpful?"
             )
             return
         
@@ -180,20 +180,20 @@ class MessageHandler:
         tasks.sort(key=lambda t: t.created_at)
         
         # Format task list with numbers and status indicators
-        message = "Your active tasks:\n\n"
+        message = "Here are the intentions you've set (there's no pressure to complete all or any of these - they're just gentle guides):\n\n"
         for i, task in enumerate(tasks, 1):
             status_indicator = "⏳"  # Pending
             if task.status == Task.STATUS_IN_PROGRESS:
                 status_indicator = "🔄"
             elif task.status == Task.STATUS_STUCK:
-                status_indicator = "❌"
+                status_indicator = "💜"
                 
             message += f"{i}. {status_indicator} {task.description}\n"
         
-        message += "\nUpdate task status with:\n"
-        message += "DONE [number] - Mark as complete\n"
-        message += "PROGRESS [number] - Mark as in progress\n"
-        message += "STUCK [number] - Mark as stuck"
+        message += "\nIf you'd like to update how things are going, you could use:\n"
+        message += "DONE [number] - Celebrate completing this\n"
+        message += "PROGRESS [number] - Note you've started this\n"
+        message += "STUCK [number] - Let me know this feels challenging"
         
         whatsapp_service.send_message(user.user_id, message)
     

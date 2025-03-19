@@ -614,22 +614,22 @@ def send_task_buttons(user, task):
     buttons = [
         {
             "id": f"task_{task.task_id}_done",
-            "title": "✅ Done"
+            "title": "✨ Completed"
         },
         {
             "id": f"task_{task.task_id}_progress",
-            "title": "🔄 In Progress"
+            "title": "🌱 Working on it"
         },
         {
             "id": f"task_{task.task_id}_stuck",
-            "title": "❌ Stuck"
+            "title": "💜 Need support"
         }
     ]
     
     whatsapp_service.send_interactive_message(
         user.user_id,
-        f"Task: {task.description}",
-        "How are you progressing with this task?",
+        f"Intention: {task.description}",
+        "How are things going with this? No pressure - any progress is valid.",
         buttons
     )
 

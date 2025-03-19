@@ -14,7 +14,7 @@ def send_weekly_checkin():
     """Send weekly mental check-in messages to all users and classify planning type"""
     logger.info("Running weekly check-in cron job")
     
-    # Get all users
+    # Get all users that have been in the system for at least a week
     users = User.get_all()
     
     if not users:
@@ -41,7 +41,7 @@ def send_weekly_checkin():
                 name = user.name.split('_')[0] if '_' in user.name else user.name
                 
                 # This check-in will be used to determine planning type
-                checkin_message = f"Hey {name}, let's check in! How are you feeling about the upcoming week?"
+                checkin_message = f"Hello {name} 💫 A gentle check-in about the week ahead - how are you feeling as we begin this new week? Whatever you're experiencing is welcome here."
                 
                 logger.info(f"Sending weekly check-in to user {user.user_id} (account {account_index})")
                 response = whatsapp_service.send_message(user.user_id, checkin_message)
@@ -76,7 +76,7 @@ def process_weekly_response(user, message_text, sentiment_score):
         logger.info(f"User {user.user_id} classified as daily planner due to low sentiment score: {sentiment_score}")
         
         # Send confirmation message
-        message = "I understand you're feeling a bit overwhelmed. I'll help you take it day by day with more frequent check-ins and simpler planning."
+        message = "I hear that things might be feeling a bit much right now, and that's completely understandable. 💜 We can take it day by day with gentler check-ins and simpler planning - one small step at a time."
         whatsapp_service.send_message(user.user_id, message)
         
         # For daily planners experiencing negative sentiment, offer one task or rest
@@ -87,7 +87,7 @@ def process_weekly_response(user, message_text, sentiment_score):
         logger.info(f"User {user.user_id} classified as weekly planner with sentiment score: {sentiment_score}")
         
         # Send confirmation message
-        message = "Sounds like you're ready to plan for the week! I'll check in each morning to help you with your daily tasks."
+        message = "Thank you for sharing how you're feeling about the week ahead. 💫 I'll be here each morning to offer a gentle check-in, if that feels helpful for your journey."
         whatsapp_service.send_message(user.user_id, message)
         
         # Prompt for weekly tasks
@@ -102,12 +102,12 @@ def offer_simplified_options(user):
     """
     whatsapp_service = get_whatsapp_service(user.account_index)
     
-    response = "Let's make today manageable. Would you prefer to:"
+    response = "Let's embrace whatever feels nurturing for you today. Would you prefer:"
     
     # Send interactive message with buttons
     buttons = [
-        {"id": "one_task", "title": "One small task"},
-        {"id": "rest_today", "title": "Rest today"}
+        {"id": "one_task", "title": "One tiny step"},
+        {"id": "rest_today", "title": "Rest & recharge"}
     ]
     
     whatsapp_service.send_interactive_buttons(user.user_id, response, buttons)
@@ -115,31 +115,17 @@ def offer_simplified_options(user):
 
 def prompt_for_weekly_tasks(user):
     """
-    Prompt the user for tasks for the entire week
+    Prompt a user to set tasks for the week
     
     Args:
         user (User): The user to prompt
     """
     whatsapp_service = get_whatsapp_service(user.account_index)
     
-    # Get the dates for the upcoming week
-    today = datetime.now()
-    dates = []
-    for i in range(7):
-        date = today + timedelta(days=i)
-        dates.append(date.strftime("%A, %b %d"))
+    response = "If it feels helpful, you could share some intentions for your week. No need to plan everything - even 1-3 gentle focuses can provide a soft framework. What might feel nurturing to focus on this week?"
+    whatsapp_service.send_message(user.user_id, response)
     
-    dates_str = "\n".join([f"- {date}" for date in dates])
-    
-    message = (
-        f"Let's plan your week ahead! You can send me tasks for each day of the week.\n\n"
-        f"Upcoming days:\n{dates_str}\n\n"
-        f"You can format your response like this:\n"
-        f"Monday: Task 1, Task 2\n"
-        f"Tuesday: Task 3\n"
-        f"... and so on."
-    )
-    whatsapp_service.send_message(user.user_id, message)
+    logger.info(f"Prompted for weekly tasks for user {user.user_id}")
 
 def parse_weekly_tasks(user, message_text):
     """
@@ -212,10 +198,10 @@ def parse_weekly_tasks(user, message_text):
     
     # Send confirmation message
     if task_count > 0:
-        message = f"Great! I've added {task_count} tasks for your week. I'll remind you about each day's tasks in our daily check-ins."
+        message = f"Thank you for sharing your intentions for the week 💫 I've gently noted your {task_count} focus areas. Remember, these are flexible guides, not rigid expectations - we can always adjust as needed."
         whatsapp_service.send_message(user.user_id, message)
     else:
-        message = "I didn't catch any tasks. Please try again with the format:\nMonday: Task 1, Task 2\nTuesday: Task 3"
+        message = "I didn't quite catch your intentions for the week. No pressure at all - when you're ready, you could share them in a format like: 'Monday: gentle stretching, call friend' or just list what feels manageable without specific days."
         whatsapp_service.send_message(user.user_id, message)
 
 def process_tasks_for_day(tasks_by_day, day, tasks_text):

@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from app.models.user import User
 from app.models.checkin import CheckIn
 from app.services.whatsapp import get_whatsapp_service
@@ -13,13 +13,14 @@ def send_checkin_reminders(reminder_type=None):
     Send reminders to users who haven't responded to their check-ins
     
     Args:
-        reminder_type (str, optional): Type of reminder to send ('morning', 'midday', 'evening').
+        reminder_type (str, optional): Type of reminder to send ('morning', 'midday', 'evening', 'nextday').
                                       If None, checks all reminder types based on time since check-in.
     """
     logger.info(f"Running check-in reminder cron job for type: {reminder_type or 'all'}")
     
     # Get all active users
     users = User.get_all_active()
+    logger.info(f"Found {len(users)} active users")
     
     # Group users by account
     users_by_account = {}
@@ -29,17 +30,21 @@ def send_checkin_reminders(reminder_type=None):
             users_by_account[account_index] = []
         users_by_account[account_index].append(user)
     
+    logger.info(f"Grouped users into {len(users_by_account)} accounts")
+    
     # Process each account
     for account_index, account_users in users_by_account.items():
         # Get the WhatsApp service for this account
         whatsapp_service = get_whatsapp_service(account_index)
+        
+        logger.info(f"Processing {len(account_users)} users for account {account_index}")
         
         # Process each user in this account
         for user in account_users:
             try:
                 _send_reminder_if_needed(user, whatsapp_service, reminder_type)
             except Exception as e:
-                logger.error(f"Error sending reminder to user {user.user_id}: {e}")
+                logger.error(f"Error sending reminder to user {user.user_id}: {e}", exc_info=True)
 
 def _send_reminder_if_needed(user, whatsapp_service, reminder_type=None):
     """
@@ -48,12 +53,15 @@ def _send_reminder_if_needed(user, whatsapp_service, reminder_type=None):
     Args:
         user (User): The user to check
         whatsapp_service (WhatsAppService): The WhatsApp service instance
-        reminder_type (str, optional): Type of reminder to send ('morning', 'midday', 'evening')
+        reminder_type (str, optional): Type of reminder to send ('morning', 'midday', 'evening', 'nextday')
     """
+    logger.info(f"Checking reminder eligibility for user {user.user_id}")
+    
     # Get the user's last check-in (sent by system)
     last_checkins = CheckIn.get_for_user(user.user_id, limit=2, is_response=False)
     
     if not last_checkins:
+        logger.info(f"No check-ins found for user {user.user_id}")
         return  # No check-ins found
     
     last_checkin = last_checkins[0]
@@ -61,13 +69,43 @@ def _send_reminder_if_needed(user, whatsapp_service, reminder_type=None):
     # Get the user's last response
     last_responses = CheckIn.get_for_user(user.user_id, limit=2, is_response=True)
     
-    # If user's last response is newer than our last check-in, they've responded already
-    if last_responses and last_responses[0].created_at > last_checkin.created_at:
+    # Log the timestamps to debug timezone issues
+    checkin_time_str = last_checkin.created_at.isoformat() if last_checkin.created_at else "None"
+    logger.info(f"Last check-in time for user {user.user_id}: {checkin_time_str}")
+    
+    if last_responses:
+        response_time_str = last_responses[0].created_at.isoformat() if last_responses[0].created_at else "None"
+        logger.info(f"Last response time for user {user.user_id}: {response_time_str}")
+    else:
+        logger.info(f"No responses found for user {user.user_id}")
+    
+    # Ensure last_checkin.created_at is timezone-aware
+    checkin_time = last_checkin.created_at
+    if checkin_time is None:
+        logger.warning(f"Check-in has no created_at timestamp for user {user.user_id}")
         return
     
-    # Calculate time since last check-in
-    time_since_checkin = datetime.now() - last_checkin.created_at
-    current_hour = datetime.now().hour
+    if checkin_time.tzinfo is None:
+        # If naive datetime, assume it's in UTC
+        checkin_time = checkin_time.replace(tzinfo=timezone.utc)
+        logger.info(f"Added UTC timezone to naive check-in datetime: {checkin_time.isoformat()}")
+    
+    # If user's last response is newer than our last check-in, they've responded already
+    if last_responses and last_responses[0].created_at:
+        response_time = last_responses[0].created_at
+        if response_time.tzinfo is None:
+            response_time = response_time.replace(tzinfo=timezone.utc)
+            
+        if response_time > checkin_time:
+            logger.info(f"User {user.user_id} already responded to latest check-in")
+            return
+    
+    # Calculate time since last check-in with timezone-aware datetimes
+    now = datetime.now(timezone.utc)
+    logger.info(f"Current time (UTC): {now.isoformat()}")
+    
+    time_since_checkin = now - checkin_time
+    logger.info(f"Time since last check-in for user {user.user_id}: {time_since_checkin}")
 
     # Get analytics about the user
     analytics_service = get_analytics_service()
@@ -76,6 +114,7 @@ def _send_reminder_if_needed(user, whatsapp_service, reminder_type=None):
 
     # First Follow-up (12:30 PM, 2 hours after check-in)
     if (reminder_type == 'morning' or reminder_type is None) and timedelta(hours=1.5) < time_since_checkin <= timedelta(hours=2.5):
+        logger.info(f"User {user.user_id} eligible for morning reminder (first follow-up)")
         message = (
             f"Hey {user.name}! 💫 Just a gentle check-in - absolutely no pressure at all. "
             f"I'm still here whenever you feel ready to connect. "
@@ -86,11 +125,15 @@ def _send_reminder_if_needed(user, whatsapp_service, reminder_type=None):
             {"id": "quick_checkin", "title": "Quick hello"},
             {"id": "remind_later", "title": "Not just now"}
         ]
-        whatsapp_service.send_interactive_buttons(user.user_id, message, buttons)
-        logger.info(f"Sent first follow-up to {user.user_id}")
+        try:
+            whatsapp_service.send_interactive_buttons(user.user_id, message, buttons)
+            logger.info(f"Sent first follow-up to {user.user_id}")
+        except Exception as e:
+            logger.error(f"Failed to send morning reminder to {user.user_id}: {str(e)}")
 
     # Mid-day Check (2:30 PM, 4 hours after check-in)
     elif (reminder_type == 'midday' or reminder_type is None) and timedelta(hours=3.5) < time_since_checkin <= timedelta(hours=4.5):
+        logger.info(f"User {user.user_id} eligible for mid-day check")
         message = (
             f"Hi {user.name}! 🌤️ The day still holds possibilities, and that's wonderful. "
             f"If it feels right for you, maybe you'd like to:"
@@ -100,11 +143,15 @@ def _send_reminder_if_needed(user, whatsapp_service, reminder_type=None):
             {"id": "self_care", "title": "Self-care time"},
             {"id": "just_chat", "title": "Just chat"}
         ]
-        whatsapp_service.send_interactive_buttons(user.user_id, message, buttons)
-        logger.info(f"Sent mid-day check to {user.user_id}")
+        try:
+            whatsapp_service.send_interactive_buttons(user.user_id, message, buttons)
+            logger.info(f"Sent mid-day check to {user.user_id}")
+        except Exception as e:
+            logger.error(f"Failed to send midday reminder to {user.user_id}: {str(e)}")
 
     # Evening Reset (6:30 PM, 8 hours after check-in)
     elif (reminder_type == 'evening' or reminder_type is None) and timedelta(hours=7.5) < time_since_checkin <= timedelta(hours=8.5):
+        logger.info(f"User {user.user_id} eligible for evening reset")
         # Get a self-care tip
         self_care_tip = task_service.get_self_care_tip()
         
@@ -119,12 +166,16 @@ def _send_reminder_if_needed(user, whatsapp_service, reminder_type=None):
             {"id": "plan_tomorrow", "title": "Gentle tomorrow plan"},
             {"id": "rest_now", "title": "Rest & recharge"}
         ]
-        whatsapp_service.send_interactive_buttons(user.user_id, message, buttons)
-        logger.info(f"Sent evening reset to {user.user_id}")
+        try:
+            whatsapp_service.send_interactive_buttons(user.user_id, message, buttons)
+            logger.info(f"Sent evening reset to {user.user_id}")
+        except Exception as e:
+            logger.error(f"Failed to send evening reminder to {user.user_id}: {str(e)}")
 
     # Next Day Support (>24 hours)
     # This is handled separately as it's not tied to a specific time of day
-    elif time_since_checkin > timedelta(hours=24):
+    elif (reminder_type == 'nextday' or reminder_type is None) and time_since_checkin > timedelta(hours=24):
+        logger.info(f"User {user.user_id} eligible for next-day support")
         message = (
             f"Hi {user.name} 💖, I've noticed we haven't connected in a little while, and that's completely okay! "
             f"Sometimes we need space or things get busy, and I'm here with warmth whenever you're ready. "
@@ -135,8 +186,13 @@ def _send_reminder_if_needed(user, whatsapp_service, reminder_type=None):
             {"id": "gentle_checkin", "title": "Just say hi"},
             {"id": "need_help", "title": "Gentle support"}
         ]
-        whatsapp_service.send_interactive_buttons(user.user_id, message, buttons)
-        logger.info(f"Sent next-day support message to {user.user_id}")
+        try:
+            whatsapp_service.send_interactive_buttons(user.user_id, message, buttons)
+            logger.info(f"Sent next-day support message to {user.user_id}")
+        except Exception as e:
+            logger.error(f"Failed to send next-day reminder to {user.user_id}: {str(e)}")
+    else:
+        logger.info(f"User {user.user_id} is not in any reminder window at the moment")
 
 def handle_reminder_response(user, response_type):
     """
@@ -148,7 +204,7 @@ def handle_reminder_response(user, response_type):
     """
     whatsapp_service = get_whatsapp_service(user.account_index)
     task_service = get_task_service()
-    current_hour = datetime.now().hour
+    current_hour = datetime.now(timezone.utc).hour  # Use timezone-aware datetime
 
     if response_type == "plan_day":
         if current_hour < 12:  # Morning

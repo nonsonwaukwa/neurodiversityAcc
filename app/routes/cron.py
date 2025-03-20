@@ -5,6 +5,7 @@ from app.cron.weekly_checkin import send_weekly_checkin
 from app.cron.reminders import send_checkin_reminders
 import os
 import logging
+from datetime import datetime, timezone
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -84,6 +85,7 @@ def followup_reminders_webhook():
     
     # Verify the cron secret
     if not verify_cron_secret():
+        logger.error("Unauthorized access attempt: Invalid or missing cron secret")
         return jsonify({"error": "Unauthorized"}), 401
     
     try:
@@ -91,13 +93,27 @@ def followup_reminders_webhook():
         data = request.get_json() or {}
         reminder_type = data.get('reminder_type')
         
+        valid_types = ['morning', 'midday', 'evening', 'nextday', None]
+        if reminder_type not in valid_types:
+            logger.warning(f"Invalid reminder_type received: {reminder_type}. Using default (None).")
+            reminder_type = None
+        
         if reminder_type:
-            logger.info(f"Handling {reminder_type} follow-up reminders")
+            logger.info(f"Processing {reminder_type} follow-up reminders")
+        else:
+            logger.info("Processing all follow-up reminders (no specific type)")
         
         # Run the follow-up reminders with the specified type
         send_checkin_reminders(reminder_type=reminder_type)
         
-        return jsonify({"status": "success", "message": f"Follow-up reminders completed for type: {reminder_type or 'all'}"}), 200
+        return jsonify({
+            "status": "success", 
+            "message": f"Follow-up reminders completed for type: {reminder_type or 'all'}",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }), 200
     except Exception as e:
-        logger.error(f"Error in follow-up reminders webhook: {str(e)}")
-        return jsonify({"error": str(e)}), 500 
+        logger.error(f"Error in follow-up reminders webhook: {str(e)}", exc_info=True)
+        return jsonify({
+            "error": str(e),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }), 500 

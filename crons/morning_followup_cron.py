@@ -62,7 +62,7 @@ def check_eligible_users():
         
         # Query for active users
         users_ref = db.collection('users')
-        active_users = users_ref.where('isActive', '==', True).stream()
+        active_users = users_ref.where('last_active', '!=', None).stream()
         
         # Convert to list and log count
         active_users_list = list(active_users)
@@ -76,9 +76,11 @@ def check_eligible_users():
             # Get user's latest check-in
             checkins_ref = db.collection('checkins')
             latest_checkin = checkins_ref.where(
-                'userId', '==', user_id
+                'user_id', '==', user_id
+            ).where(
+                'is_response', '==', False
             ).order_by(
-                'timestamp', direction=firestore.Query.DESCENDING
+                'created_at', direction=firestore.Query.DESCENDING
             ).limit(1).stream()
             
             latest_checkin_list = list(latest_checkin)
@@ -87,7 +89,7 @@ def check_eligible_users():
                 continue
                 
             latest_checkin_data = latest_checkin_list[0].to_dict()
-            checkin_time = latest_checkin_data.get('timestamp')
+            checkin_time = latest_checkin_data.get('created_at')
             
             if not checkin_time:
                 logger.warning(f"Check-in for user {user_id} has no timestamp")
@@ -106,7 +108,15 @@ def check_eligible_users():
             logger.info(f"User {user_id} last check-in was {time_since_checkin} ago")
             
             # Check if user has responded
-            has_responded = latest_checkin_data.get('hasResponded', False)
+            responses = checkins_ref.where(
+                'user_id', '==', user_id
+            ).where(
+                'is_response', '==', True
+            ).where(
+                'created_at', '>', checkin_time
+            ).limit(1).stream()
+            
+            has_responded = len(list(responses)) > 0
             if has_responded:
                 logger.info(f"User {user_id} has already responded to their latest check-in")
                 continue
@@ -116,8 +126,8 @@ def check_eligible_users():
                 logger.info(f"User {user_id} is eligible for a morning follow-up reminder")
                 eligible_users.append({
                     'id': user_id,
-                    'phone': user_data.get('phone'),
-                    'name': user_data.get('name'),
+                    'phone': user_id,  # WhatsApp number is stored in user_id
+                    'name': user_data.get('name', f"User_{user_id[-4:]}"),
                     'checkinTime': checkin_time,
                     'timeSinceCheckin': time_since_checkin
                 })

@@ -9,6 +9,7 @@ It's designed to be executed as a standalone cron job on Railway.
 Required environment variables:
 - APP_URL: The base URL of the deployed application (required on Railway)
 - CRON_SECRET: Secret token for webhook authentication
+- FIREBASE_CREDENTIALS: Firebase service account credentials JSON
 """
 
 import os
@@ -29,163 +30,176 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def check_eligible_users():
-    """
-    Check and log which users would be eligible for morning reminders.
-    """
+    """Check for users eligible for follow-up reminders."""
     try:
-        # Initialize Firebase if not already initialized
-        if not firebase_admin._apps:
-            cred = credentials.Certificate('./config/firebase-credentials.json')
+        # Get Firebase credentials from environment
+        creds_json = os.environ.get('FIREBASE_CREDENTIALS')
+        if not creds_json:
+            logger.error("FIREBASE_CREDENTIALS environment variable not set")
+            return []
+            
+        try:
+            creds_dict = json.loads(creds_json)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse FIREBASE_CREDENTIALS JSON: {e}")
+            return []
+            
+        # Initialize Firebase Admin
+        try:
+            cred = credentials.Certificate(creds_dict)
             firebase_admin.initialize_app(cred)
-        
+            logger.info("Firebase Admin initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize Firebase Admin: {e}")
+            return []
+
         # Get Firestore client
         db = firestore.client()
         
-        # Get all active users
+        # Get current time in UTC
+        current_time = datetime.now(timezone.utc)
+        logger.info(f"Checking for eligible users at {current_time.isoformat()}")
+        
+        # Query for active users
         users_ref = db.collection('users')
-        users = users_ref.where('is_active', '==', True).stream()
-        users_list = list(users)
-        logger.info(f"Found {len(users_list)} total active users")
+        active_users = users_ref.where('isActive', '==', True).stream()
+        
+        # Convert to list and log count
+        active_users_list = list(active_users)
+        logger.info(f"Found {len(active_users_list)} active users")
         
         eligible_users = []
-        current_time = datetime.now(timezone.utc)
-        
-        for user in users_list:
+        for user in active_users_list:
             user_data = user.to_dict()
             user_id = user.id
-            user_name = user_data.get('name', f"User_{user_id[-4:]}")
             
-            # Get user's last check-in
+            # Get user's latest check-in
             checkins_ref = db.collection('checkins')
-            last_checkin = checkins_ref.where('user_id', '==', user_id)\
-                                     .where('is_response', '==', False)\
-                                     .order_by('created_at', direction=firestore.Query.DESCENDING)\
-                                     .limit(1)\
-                                     .stream()
+            latest_checkin = checkins_ref.where(
+                'userId', '==', user_id
+            ).order_by(
+                'timestamp', direction=firestore.Query.DESCENDING
+            ).limit(1).stream()
             
-            last_checkin_list = list(last_checkin)
-            if last_checkin_list:
-                last_checkin_data = last_checkin_list[0].to_dict()
-                last_checkin_time = last_checkin_data['created_at']
+            latest_checkin_list = list(latest_checkin)
+            if not latest_checkin_list:
+                logger.info(f"No check-ins found for user {user_id}")
+                continue
                 
-                # Convert to datetime if it's a timestamp
-                if isinstance(last_checkin_time, (firestore.SERVER_TIMESTAMP, datetime)):
-                    last_checkin_time = last_checkin_time
-                else:
-                    last_checkin_time = datetime.fromisoformat(last_checkin_time.rstrip('Z')).replace(tzinfo=timezone.utc)
+            latest_checkin_data = latest_checkin_list[0].to_dict()
+            checkin_time = latest_checkin_data.get('timestamp')
+            
+            if not checkin_time:
+                logger.warning(f"Check-in for user {user_id} has no timestamp")
+                continue
                 
-                time_since_checkin = current_time - last_checkin_time
-                logger.info(f"User {user_name} (ID: {user_id}):")
-                logger.info(f"  - Last check-in: {last_checkin_time.isoformat()}")
-                logger.info(f"  - Time since check-in: {time_since_checkin}")
+            # Convert to datetime if string
+            if isinstance(checkin_time, str):
+                try:
+                    checkin_time = datetime.fromisoformat(checkin_time.replace('Z', '+00:00'))
+                except ValueError as e:
+                    logger.error(f"Failed to parse check-in timestamp for user {user_id}: {e}")
+                    continue
+            
+            # Calculate time since check-in
+            time_since_checkin = current_time - checkin_time
+            logger.info(f"User {user_id} last check-in was {time_since_checkin} ago")
+            
+            # Check if user has responded
+            has_responded = latest_checkin_data.get('hasResponded', False)
+            if has_responded:
+                logger.info(f"User {user_id} has already responded to their latest check-in")
+                continue
                 
-                # Check if user has responded
-                responses = checkins_ref.where('user_id', '==', user_id)\
-                                     .where('is_response', '==', True)\
-                                     .where('created_at', '>', last_checkin_time)\
-                                     .limit(1)\
-                                     .stream()
-                
-                has_response = len(list(responses)) > 0
-                logger.info(f"  - Has responded: {has_response}")
-                
-                # Morning reminder window: 1.5-2.5 hours after check-in
-                if timedelta(hours=1.5) <= time_since_checkin <= timedelta(hours=2.5) and not has_response:
-                    eligible_users.append({
-                        'id': user_id,
-                        'name': user_name,
-                        'last_checkin': last_checkin_time.isoformat(),
-                        'time_since_checkin': str(time_since_checkin)
-                    })
+            # Check if within reminder window (2 hours after check-in)
+            if timedelta(hours=1.5) <= time_since_checkin <= timedelta(hours=2.5):
+                logger.info(f"User {user_id} is eligible for a morning follow-up reminder")
+                eligible_users.append({
+                    'id': user_id,
+                    'phone': user_data.get('phone'),
+                    'name': user_data.get('name'),
+                    'checkinTime': checkin_time,
+                    'timeSinceCheckin': time_since_checkin
+                })
             else:
-                logger.info(f"User {user_name} (ID: {user_id}): No check-ins found")
+                logger.info(f"User {user_id} is not in the morning follow-up window")
         
-        if eligible_users:
-            logger.info(f"Found {len(eligible_users)} users eligible for morning reminders:")
-            for user in eligible_users:
-                logger.info(f"  - {user['name']} (ID: {user['id']})")
-                logger.info(f"    Last check-in: {user['last_checkin']}")
-                logger.info(f"    Time since check-in: {user['time_since_checkin']}")
-        else:
-            logger.info("No users are currently eligible for morning reminders")
-            
-        return len(eligible_users)
+        logger.info(f"Found {len(eligible_users)} users eligible for morning follow-up reminders")
+        return eligible_users
         
     except Exception as e:
-        logger.error(f"Error checking eligible users: {str(e)}")
-        logger.exception("Full traceback:")
-        return 0
+        logger.error(f"Error checking eligible users: {e}")
+        return []
+        
+    finally:
+        # Clean up Firebase Admin
+        try:
+            firebase_admin.delete_app(firebase_admin.get_app())
+            logger.info("Firebase Admin cleaned up successfully")
+        except Exception as e:
+            logger.warning(f"Failed to clean up Firebase Admin: {e}")
 
 def trigger_followup_reminders():
-    """
-    Trigger the follow-up reminders webhook for users who haven't responded to their check-ins.
-    """
-    # Check eligible users first
-    eligible_count = check_eligible_users()
-    logger.info(f"Found {eligible_count} users eligible for reminders")
-    
-    # Prioritize APP_URL as it's the one set in Railway
-    app_url = os.environ.get('APP_URL')
-    if not app_url:
-        logger.error("Missing required environment variable: APP_URL")
-        return False
-    
-    cron_secret = os.environ.get('CRON_SECRET')
-    if not cron_secret:
-        logger.error("Missing required environment variable: CRON_SECRET")
-        return False
-    
-    # Log environment info
-    logger.info(f"Using application URL: {app_url}")
-    logger.info(f"CRON_SECRET is {'set' if cron_secret else 'not set'}")
-    
-    # Construct webhook URL
-    webhook_url = urljoin(app_url, '/api/cron/followup-reminders')
-    logger.info(f"Constructed webhook URL: {webhook_url}")
-    
-    # Prepare headers with authentication
-    headers = {
-        'Content-Type': 'application/json',
-        'X-Cron-Secret': cron_secret
-    }
-    
-    # Get current time in UTC
-    current_time = datetime.now(timezone.utc)
-    
-    # Prepare payload with timestamp and reminder type
-    payload = {
-        'timestamp': current_time.isoformat(),
-        'reminder_type': 'morning'  # Indicates this is the morning follow-up
-    }
-    
-    logger.info(f"Sending request at {current_time.isoformat()} UTC")
-    logger.info(f"Payload: {json.dumps(payload, indent=2)}")
-    
-    # Make the request
+    """Trigger follow-up reminders for eligible users."""
     try:
-        logger.info("Triggering morning follow-up reminders webhook...")
-        response = requests.post(webhook_url, headers=headers, json=payload, timeout=30)
+        # Check environment variables
+        app_url = os.environ.get('APP_URL')
+        cron_secret = os.environ.get('CRON_SECRET')
         
-        logger.info(f"Response status code: {response.status_code}")
-        logger.info(f"Response headers: {dict(response.headers)}")
-        
-        if response.status_code == 200:
-            try:
-                response_data = response.json()
-                logger.info(f"Success! Response data: {json.dumps(response_data, indent=2)}")
-            except json.JSONDecodeError:
-                logger.info(f"Success! Response text: {response.text}")
-            return True
-        else:
-            logger.error(f"Failed with status {response.status_code}")
-            logger.error(f"Response text: {response.text}")
+        if not app_url or not cron_secret:
+            logger.error("Missing required environment variables (APP_URL or CRON_SECRET)")
             return False
             
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Request failed: {str(e)}")
-        if hasattr(e, 'response'):
-            logger.error(f"Response status code: {e.response.status_code}")
-            logger.error(f"Response text: {e.response.text}")
+        # Get eligible users
+        eligible_users = check_eligible_users()
+        if not eligible_users:
+            logger.info("No users eligible for follow-up reminders")
+            return True
+            
+        # Group users by phone number (account)
+        users_by_account = {}
+        for user in eligible_users:
+            phone = user.get('phone')
+            if not phone:
+                logger.warning(f"User {user['id']} has no phone number")
+                continue
+            if phone not in users_by_account:
+                users_by_account[phone] = []
+            users_by_account[phone].append(user)
+            
+        logger.info(f"Found {len(users_by_account)} accounts with eligible users")
+        
+        # Call webhook for each account
+        webhook_url = f"{app_url.rstrip('/')}/api/cron/followup-reminders"
+        headers = {
+            'Content-Type': 'application/json',
+            'X-Cron-Secret': cron_secret
+        }
+        
+        success_count = 0
+        for account_phone, account_users in users_by_account.items():
+            try:
+                data = {
+                    'type': 'morning',
+                    'users': [user['id'] for user in account_users]
+                }
+                
+                response = requests.post(webhook_url, json=data, headers=headers)
+                
+                if response.status_code == 200:
+                    logger.info(f"Successfully triggered reminders for account {account_phone}")
+                    success_count += 1
+                else:
+                    logger.error(f"Failed to trigger reminders for account {account_phone}: {response.status_code} - {response.text}")
+                    
+            except Exception as e:
+                logger.error(f"Error triggering reminders for account {account_phone}: {e}")
+                
+        logger.info(f"Successfully triggered reminders for {success_count}/{len(users_by_account)} accounts")
+        return success_count > 0 or len(users_by_account) == 0
+        
+    except Exception as e:
+        logger.error(f"Error triggering follow-up reminders: {e}")
         return False
 
 if __name__ == "__main__":
@@ -203,12 +217,13 @@ if __name__ == "__main__":
     env_vars = {
         'APP_URL': os.environ.get('APP_URL', 'not set'),
         'CRON_SECRET': 'present' if os.environ.get('CRON_SECRET') else 'not set',
+        'FIREBASE_CREDENTIALS': 'present' if os.environ.get('FIREBASE_CREDENTIALS') else 'not set',
         'RAILWAY_STATIC_URL': os.environ.get('RAILWAY_STATIC_URL', 'not set'),
         'RAILWAY_ENVIRONMENT': os.environ.get('RAILWAY_ENVIRONMENT', 'not set')
     }
     logger.info("Environment Configuration:")
     for key, value in env_vars.items():
-        if key != 'CRON_SECRET':
+        if key not in ['CRON_SECRET', 'FIREBASE_CREDENTIALS']:
             logger.info(f"  {key}: {value}")
         else:
             logger.info(f"  {key}: {value}")

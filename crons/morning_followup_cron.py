@@ -20,8 +20,6 @@ from urllib.parse import urljoin
 import sys
 import firebase_admin
 from firebase_admin import credentials, firestore
-from app.models.user import User
-from app.models.checkin import CheckIn
 
 # Configure logging
 logging.basicConfig(
@@ -40,36 +38,67 @@ def check_eligible_users():
             cred = credentials.Certificate('./config/firebase-credentials.json')
             firebase_admin.initialize_app(cred)
         
+        # Get Firestore client
+        db = firestore.client()
+        
         # Get all active users
-        users = User.get_all_active()
-        logger.info(f"Found {len(users)} total active users")
+        users_ref = db.collection('users')
+        users = users_ref.where('is_active', '==', True).stream()
+        users_list = list(users)
+        logger.info(f"Found {len(users_list)} total active users")
         
         eligible_users = []
         current_time = datetime.now(timezone.utc)
         
-        for user in users:
+        for user in users_list:
+            user_data = user.to_dict()
+            user_id = user.id
+            user_name = user_data.get('name', f"User_{user_id[-4:]}")
+            
             # Get user's last check-in
-            last_checkin = CheckIn.get_last_checkin(user.id)
-            if last_checkin:
-                time_since_checkin = current_time - last_checkin.created_at
-                logger.info(f"User {user.name} (ID: {user.id}):")
-                logger.info(f"  - Last check-in: {last_checkin.created_at.isoformat()}")
+            checkins_ref = db.collection('checkins')
+            last_checkin = checkins_ref.where('user_id', '==', user_id)\
+                                     .where('is_response', '==', False)\
+                                     .order_by('created_at', direction=firestore.Query.DESCENDING)\
+                                     .limit(1)\
+                                     .stream()
+            
+            last_checkin_list = list(last_checkin)
+            if last_checkin_list:
+                last_checkin_data = last_checkin_list[0].to_dict()
+                last_checkin_time = last_checkin_data['created_at']
+                
+                # Convert to datetime if it's a timestamp
+                if isinstance(last_checkin_time, (firestore.SERVER_TIMESTAMP, datetime)):
+                    last_checkin_time = last_checkin_time
+                else:
+                    last_checkin_time = datetime.fromisoformat(last_checkin_time.rstrip('Z')).replace(tzinfo=timezone.utc)
+                
+                time_since_checkin = current_time - last_checkin_time
+                logger.info(f"User {user_name} (ID: {user_id}):")
+                logger.info(f"  - Last check-in: {last_checkin_time.isoformat()}")
                 logger.info(f"  - Time since check-in: {time_since_checkin}")
                 
                 # Check if user has responded
-                has_response = CheckIn.has_response_since(user.id, last_checkin.created_at)
+                responses = checkins_ref.where('user_id', '==', user_id)\
+                                     .where('is_response', '==', True)\
+                                     .where('created_at', '>', last_checkin_time)\
+                                     .limit(1)\
+                                     .stream()
+                
+                has_response = len(list(responses)) > 0
                 logger.info(f"  - Has responded: {has_response}")
                 
                 # Morning reminder window: 1.5-2.5 hours after check-in
                 if timedelta(hours=1.5) <= time_since_checkin <= timedelta(hours=2.5) and not has_response:
                     eligible_users.append({
-                        'id': user.id,
-                        'name': user.name,
-                        'last_checkin': last_checkin.created_at.isoformat(),
+                        'id': user_id,
+                        'name': user_name,
+                        'last_checkin': last_checkin_time.isoformat(),
                         'time_since_checkin': str(time_since_checkin)
                     })
             else:
-                logger.info(f"User {user.name} (ID: {user.id}): No check-ins found")
+                logger.info(f"User {user_name} (ID: {user_id}): No check-ins found")
         
         if eligible_users:
             logger.info(f"Found {len(eligible_users)} users eligible for morning reminders:")
@@ -84,6 +113,7 @@ def check_eligible_users():
         
     except Exception as e:
         logger.error(f"Error checking eligible users: {str(e)}")
+        logger.exception("Full traceback:")
         return 0
 
 def trigger_followup_reminders():

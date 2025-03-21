@@ -287,18 +287,53 @@ def send_support_options(user, message=None):
     """
     whatsapp_service = get_whatsapp_service(user.account_index)
     
-    response = message if message else "Let's embrace whatever feels nurturing for you right now."
-    response += " Would any of these feel supportive?"
+    header = "Need Some Support? 💜"
+    body = message if message else "Let's embrace whatever feels nurturing for you right now."
+    button_text = "View Support Options"
     
-    # Send interactive message with buttons
-    buttons = [
-        {"id": "adhd_strategies", "title": "ADHD-friendly strategies"},
-        {"id": "self_care", "title": "Self-care tips"},
-        {"id": "gentle_reminder", "title": "Just a gentle reminder"}
-    ]
+    sections = [{
+        "title": "Available Support",
+        "rows": [
+            {
+                "id": "adhd_strategies",
+                "title": "ADHD-friendly strategies",
+                "description": "Quick tips to help manage focus and tasks"
+            },
+            {
+                "id": "self_care",
+                "title": "Self-care tips",
+                "description": "Gentle reminders for taking care of yourself"
+            },
+            {
+                "id": "gentle_reminder",
+                "title": "A gentle reminder",
+                "description": "Sometimes we just need a kind word"
+            },
+            {
+                "id": "breathing_exercise",
+                "title": "Quick breathing exercise",
+                "description": "A simple way to find calm in the moment"
+            },
+            {
+                "id": "positive_affirmation",
+                "title": "Positive affirmation",
+                "description": "Words of encouragement just for you"
+            }
+        ]
+    }]
     
-    whatsapp_service.send_interactive_buttons(user.user_id, response, buttons)
-    logger.info(f"Sent support options to {user.user_id}")
+    success = whatsapp_service.send_list_message_with_fallback(
+        to=user.user_id,
+        header_text=header,
+        body_text=body,
+        button_text=button_text,
+        sections=sections
+    )
+    
+    if success:
+        logger.info(f"Sent support options to {user.user_id}")
+    else:
+        logger.error(f"Failed to send support options to {user.user_id}")
 
 if __name__ == "__main__":
     send_end_of_day_checkins() 

@@ -391,16 +391,70 @@ class WhatsAppService:
             return None
     
     def get_headers(self):
-        """
-        Get headers for WhatsApp API requests
-        
-        Returns:
-            dict: Headers for WhatsApp API requests
-        """
+        """Get the authorization headers for WhatsApp API requests"""
         return {
             'Authorization': f'Bearer {self.access_token}',
             'Content-Type': 'application/json'
         }
+        
+    def check_connection(self):
+        """
+        Check if the WhatsApp API credentials are working
+        
+        Returns:
+            bool: True if connection is successful, False otherwise
+        """
+        try:
+            # Try to get the business profile info as a simple connection test
+            url = f"{self.api_url}/{self.phone_number_id}"
+            headers = self.get_headers()
+            
+            logger.info(f"Testing WhatsApp API connection to: {url}")
+            response = requests.get(url, headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                logger.info("WhatsApp API connection successful")
+                return True
+            else:
+                logger.error(f"WhatsApp API connection failed: {response.status_code} - {response.text}")
+                return False
+        except Exception as e:
+            logger.error(f"Error checking WhatsApp API connection: {str(e)}")
+            return False
+            
+    def get_account_info(self):
+        """
+        Get information about the WhatsApp account
+        
+        Returns:
+            dict: Account information if successful, None otherwise
+        """
+        try:
+            url = f"{self.api_url}/{self.phone_number_id}"
+            headers = self.get_headers()
+            
+            response = requests.get(url, headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                return {
+                    "phone_number_id": self.phone_number_id,
+                    "account_status": "active",
+                    "response_data": data
+                }
+            else:
+                logger.error(f"Failed to get account info: {response.status_code} - {response.text}")
+                return {
+                    "phone_number_id": self.phone_number_id,
+                    "account_status": "error",
+                    "error_details": {
+                        "status_code": response.status_code,
+                        "response": response.text
+                    }
+                }
+        except Exception as e:
+            logger.error(f"Error getting account info: {str(e)}")
+            return None
 
 # Create an instance of the service
 def get_whatsapp_service(account_index=0):

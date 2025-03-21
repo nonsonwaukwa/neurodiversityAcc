@@ -16,6 +16,7 @@ lib64/
 parts/
 sdist/
 var/
+wheels/
 *.egg-info/
 .installed.cfg
 *.egg
@@ -54,4 +55,23 @@ logs/
 *.log
 
 # Railway
-.railway/ 
+.railway/
+
+# Firebase
+.firebase/
+firebase-debug.log
+.firebaserc
+
+# Test files
+test_*.py
+*_test.py
+testrecroding.mp3
+check_*.py
+debug_*.py
+simulate_*.py
+send_test_*.py
+trigger_*.py
+create_backdated_*.py
+setup_firestore_*.py
+fix_*.py
+send_direct_*.py 

@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify, current_app
 from app.cron.daily_checkin import send_daily_checkin
 from app.cron.daily_tasks import send_daily_tasks
 from app.cron.weekly_checkin import send_weekly_checkin
-from app.cron.reminders import send_checkin_reminders
+from app.cron.end_of_day_checkin import send_end_of_day_checkin
 import os
 import logging
 from datetime import datetime, timezone
@@ -78,42 +78,19 @@ def weekly_checkin_webhook():
         logger.error(f"Error in weekly check-in webhook: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-@cron_bp.route('/cron/followup-reminders', methods=['POST'])
-def followup_reminders_webhook():
-    """Handle the follow-up reminders cron job webhook."""
-    logger.info("Received follow-up reminders webhook request")
+@cron_bp.route('/cron/end-of-day', methods=['POST'])
+def end_of_day_webhook():
+    """Handle the end of day check-in cron job webhook."""
+    logger.info("Received end of day check-in webhook request")
     
     # Verify the cron secret
     if not verify_cron_secret():
-        logger.error("Unauthorized access attempt: Invalid or missing cron secret")
         return jsonify({"error": "Unauthorized"}), 401
     
     try:
-        # Get the reminder type from the request payload
-        data = request.get_json() or {}
-        reminder_type = data.get('reminder_type')
-        
-        valid_types = ['morning', 'midday', 'evening', 'nextday', None]
-        if reminder_type not in valid_types:
-            logger.warning(f"Invalid reminder_type received: {reminder_type}. Using default (None).")
-            reminder_type = None
-        
-        if reminder_type:
-            logger.info(f"Processing {reminder_type} follow-up reminders")
-        else:
-            logger.info("Processing all follow-up reminders (no specific type)")
-        
-        # Run the follow-up reminders with the specified type
-        send_checkin_reminders(reminder_type=reminder_type)
-        
-        return jsonify({
-            "status": "success", 
-            "message": f"Follow-up reminders completed for type: {reminder_type or 'all'}",
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }), 200
+        # Run the end of day check-in
+        send_end_of_day_checkin()
+        return jsonify({"status": "success", "message": "End of day check-in completed"}), 200
     except Exception as e:
-        logger.error(f"Error in follow-up reminders webhook: {str(e)}", exc_info=True)
-        return jsonify({
-            "error": str(e),
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }), 500 
+        logger.error(f"Error in end of day check-in webhook: {str(e)}")
+        return jsonify({"error": str(e)}), 500 

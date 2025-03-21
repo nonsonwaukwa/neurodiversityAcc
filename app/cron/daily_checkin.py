@@ -15,7 +15,10 @@ logger = logging.getLogger(__name__)
 
 def send_daily_checkin():
     """Send daily check-in messages to all users from both accounts"""
-    logger.info("Running daily check-in cron job")
+    logger.info("========================================")
+    logger.info("Starting daily check-in cron job")
+    logger.info(f"Current time: {datetime.now().isoformat()}")
+    logger.info("========================================")
     
     # Get all users
     users = User.get_all()
@@ -23,6 +26,8 @@ def send_daily_checkin():
     if not users:
         logger.info("No users found for daily check-in")
         return
+    
+    logger.info(f"Found {len(users)} users to send check-ins to")
     
     # Group users by account
     users_by_account = {}
@@ -32,31 +37,78 @@ def send_daily_checkin():
             users_by_account[account_index] = []
         users_by_account[account_index].append(user)
     
+    logger.info(f"Users grouped into {len(users_by_account)} accounts")
+    
     # Process each account
     for account_index, account_users in users_by_account.items():
+        logger.info(f"Processing account {account_index} with {len(account_users)} users")
+        
         # Get the WhatsApp service for this account
         whatsapp_service = get_whatsapp_service(account_index)
         
         # Process each user in this account
         for user in account_users:
             try:
+                logger.info("----------------------------------------")
+                logger.info(f"Processing user: {user.user_id}")
+                logger.info(f"User name: {user.name}")
+                logger.info(f"Account index: {account_index}")
+                
                 # Format the message with the user's name
                 name = user.name.split('_')[0] if '_' in user.name else user.name
                 checkin_message = f"Good morning {name} 💫 I hope you've been able to rest. How are you feeling today? Whatever you're experiencing is completely valid."
                 
-                logger.info(f"Sending daily check-in to user {user.user_id} (account {account_index})")
+                logger.info(f"Prepared message for {user.name}:")
+                logger.info(f"Message content: {checkin_message}")
+                
+                # Send the message
+                logger.info(f"Attempting to send message to {user.user_id}...")
                 response = whatsapp_service.send_message(user.user_id, checkin_message)
                 
+                # Log detailed WhatsApp API response
+                if response:
+                    logger.info("WhatsApp API Response Details:")
+                    logger.info(f"Response data: {response}")
+                    
+                    # Check for specific response fields that indicate success
+                    message_id = response.get('messages', [{}])[0].get('id') if response.get('messages') else None
+                    if message_id:
+                        logger.info(f"Message ID from WhatsApp: {message_id}")
+                        logger.info("Message accepted by WhatsApp API ✓")
+                    else:
+                        logger.warning("Message accepted but no message ID returned")
+                else:
+                    logger.error("No response from WhatsApp API")
+                    logger.error("Message may not have been sent")
+                
                 # Store this message as a check-in
-                CheckIn.create(user.user_id, checkin_message, CheckIn.TYPE_DAILY)
+                logger.info("Creating check-in record in database...")
+                checkin = CheckIn.create(user.user_id, checkin_message, CheckIn.TYPE_DAILY)
+                logger.info(f"Created check-in record with ID: {checkin.checkin_id}")
                 
                 if response:
-                    logger.info(f"Successfully sent daily check-in to user {user.user_id}")
+                    logger.info("✓ Successfully completed check-in process:")
+                    logger.info("  - Message sent to WhatsApp API")
+                    logger.info("  - Check-in record created in database")
+                    logger.info(f"  - Recipient: {user.name} ({user.user_id})")
                 else:
-                    logger.error(f"Failed to send daily check-in to user {user.user_id}")
+                    logger.error("✗ Check-in process incomplete:")
+                    logger.error("  - Failed to get confirmation from WhatsApp API")
+                    logger.error("  - Check-in record created but message may not be delivered")
+                    logger.error(f"  - Affected user: {user.name} ({user.user_id})")
             
             except Exception as e:
-                logger.error(f"Error sending daily check-in to user {user.user_id}: {e}")
+                logger.error("========================================")
+                logger.error(f"Error processing check-in for user {user.user_id}")
+                logger.error(f"User name: {user.name}")
+                logger.error(f"Error type: {type(e).__name__}")
+                logger.error(f"Error details: {str(e)}")
+                logger.error("========================================")
+    
+    logger.info("========================================")
+    logger.info("Daily check-in cron job completed")
+    logger.info(f"End time: {datetime.now().isoformat()}")
+    logger.info("========================================")
 
 def process_daily_response(user, message_text, sentiment_score):
     """

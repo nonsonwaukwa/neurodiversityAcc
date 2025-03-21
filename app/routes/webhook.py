@@ -88,11 +88,44 @@ def whatsapp_webhook():
         # Get the user
         user = User.get_or_create(from_number)
         
+        # Check if this is a new user (just created)
+        is_new_user = user.name.startswith('User ')  # Default name format for new users
+        
         # Update user's last active time
         user.update_last_active()
         
         # Get WhatsApp service
         whatsapp_service = get_whatsapp_service(user.account_index)
+        
+        # Handle welcome flow for new users
+        if is_new_user and message_type == 'text' and message_text.lower() in ['hi', 'hello', 'hey']:
+            welcome_message = (
+                "👋 Hi there! I'm your friendly accountability partner. I'm here to help you navigate your day, "
+                "celebrate your wins (big or small), and work through any challenges.\n\n"
+                "I'm designed to be flexible and supportive, especially on those days when things feel a bit much. "
+                "What would you like me to call you?"
+            )
+            whatsapp_service.send_message(from_number, welcome_message)
+            return jsonify({"status": "success", "message": "Welcome message sent"}), 200
+        
+        # Handle name response for new users
+        if is_new_user and message_type == 'text' and not message_text.lower() in ['hi', 'hello', 'hey']:
+            # Update user's name
+            user.name = message_text.strip()
+            user.update()
+            
+            # Send confirmation and next steps
+            confirmation = (
+                f"Nice to meet you, {user.name}! 👋\n\n"
+                "I'll help you stay on track with your tasks and goals. Here's what I can do:\n"
+                "• Daily check-ins to see how you're feeling\n"
+                "• Task management and reminders\n"
+                "• Weekly progress tracking\n"
+                "• Support when you're feeling stuck\n\n"
+                "Would you like to add your first task?"
+            )
+            whatsapp_service.send_message(from_number, confirmation)
+            return jsonify({"status": "success", "message": "User name updated"}), 200
         
         # Initialize message text
         message_text = None

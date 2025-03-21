@@ -240,5 +240,38 @@ class MessageHandler:
         if message_text.lower().strip() in ['tasks', 'list', 'show tasks']:
             MessageHandler.list_active_tasks(user)
             return True
+            
+        # Check if this is a response to the "add first task" prompt
+        if user.name and not user.name.startswith('User '):  # User has set their name
+            # Get active tasks
+            active_tasks = Task.get_for_user(user.user_id, status=[
+                Task.STATUS_PENDING,
+                Task.STATUS_IN_PROGRESS,
+                Task.STATUS_STUCK
+            ])
+            
+            # If no active tasks, treat this as a new task
+            if not active_tasks:
+                whatsapp_service = get_whatsapp_service(user.account_index)
+                
+                # Create the task
+                task = Task.create(
+                    user_id=user.user_id,
+                    description=message_text.strip(),
+                    status=Task.STATUS_PENDING
+                )
+                
+                # Send confirmation
+                confirmation = (
+                    f"✨ I've added your intention: {task.description}\n\n"
+                    "You can update how things are going by using:\n"
+                    "• DONE [number] - When you complete something\n"
+                    "• PROGRESS [number] - When you start working on it\n"
+                    "• STUCK [number] - If you need some support\n\n"
+                    "Would you like to add another intention?"
+                )
+                
+                whatsapp_service.send_message(user.user_id, confirmation)
+                return True
         
         return False  # Message wasn't handled 

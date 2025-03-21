@@ -22,30 +22,28 @@ class Task:
     INPUT_METHOD_WHATSAPP = 'WHATSAPP'
     INPUT_METHOD_BACKOFFICE = 'BACKOFFICE'
     
-    def __init__(self, task_id, user_id, description, status=STATUS_PENDING, 
-                 created_at=None, scheduled_date=None, tracking_type=TRACKING_TYPE_AI, 
-                 input_method=INPUT_METHOD_WHATSAPP):
+    def __init__(self, task_id=None, user_id=None, description=None, status=None, created_at=None, scheduled_date=None, completed_at=None, tracking_type=None):
         """
         Initialize a task
         
         Args:
-            task_id (str): Unique task identifier
-            user_id (str): The user's WhatsApp number
-            description (str): Task description
-            status (str): Task status (pending, in_progress, done, stuck)
-            created_at (datetime): When the task was created
-            scheduled_date (datetime): Date the task is scheduled for
-            tracking_type (str): Whether task is tracked via AI or human input
-            input_method (str): How the task was created (WhatsApp or back office)
+            task_id (str, optional): Task ID. Defaults to None.
+            user_id (str, optional): User ID. Defaults to None.
+            description (str, optional): Task description. Defaults to None.
+            status (str, optional): Task status. Defaults to None.
+            created_at (datetime, optional): Creation timestamp. Defaults to None.
+            scheduled_date (datetime, optional): Scheduled date. Defaults to None.
+            completed_at (datetime, optional): Completion timestamp. Defaults to None.
+            tracking_type (str, optional): Type of tracking. Defaults to None.
         """
-        self.task_id = task_id
+        self.task_id = task_id or str(uuid.uuid4())
         self.user_id = user_id
         self.description = description
-        self.status = status
+        self.status = status or self.STATUS_PENDING
         self.created_at = created_at or datetime.now()
-        self.scheduled_date = scheduled_date  # For weekly planning, tasks can be scheduled for specific days
-        self.tracking_type = tracking_type
-        self.input_method = input_method
+        self.scheduled_date = scheduled_date
+        self.completed_at = completed_at
+        self.tracking_type = tracking_type or self.TRACKING_TYPE_HUMAN
     
     def to_dict(self):
         """Convert the task to a dictionary"""
@@ -136,69 +134,55 @@ class Task:
         
         return Task(task_id, user_id, description, status, created_at, scheduled_date)
     
-    @staticmethod
-    def get_for_user(user_id, status=None, scheduled_date=None):
+    @classmethod
+    def get_for_user(cls, user_id, status=None, scheduled_date=None):
         """
         Get tasks for a user
         
         Args:
-            user_id (str): User ID
-            status (str, optional): Filter by task status. Defaults to None.
-            scheduled_date (datetime, optional): Filter by scheduled date. Defaults to None.
+            user_id (str): The user's ID
+            status (str, optional): Filter by status
+            scheduled_date (datetime, optional): Filter by scheduled date
             
         Returns:
-            list: List of Task objects
+            list: List of tasks
         """
         db = get_db()
-        query = db.collection('tasks')
-        
-        # Build compound query
-        filters = [('user_id', '==', user_id)]
+        query = db.collection('tasks').where('user_id', '==', user_id)
         
         if status:
-            if isinstance(status, list):
-                # If status is a list, we'll filter in memory since Firestore doesn't support OR conditions
-                filters.append(('status', 'in', status))
-            else:
-                filters.append(('status', '==', status))
-        
+            query = query.where('status', '==', status)
+            
         if scheduled_date:
-            date_str = scheduled_date.strftime('%Y-%m-%d')
-            filters.append(('scheduled_date', '==', date_str))
-        
-        # Apply all filters
-        for field, op, value in filters:
-            query = query.where(field, op, value)
-        
-        # Execute query
-        results = query.stream()
+            # Convert to datetime if needed
+            if not isinstance(scheduled_date, datetime):
+                scheduled_date = datetime.fromisoformat(str(scheduled_date))
+            # Get start and end of day
+            start_of_day = datetime(scheduled_date.year, scheduled_date.month, scheduled_date.day)
+            end_of_day = datetime(scheduled_date.year, scheduled_date.month, scheduled_date.day, 23, 59, 59)
+            query = query.where('scheduled_date', '>=', start_of_day)
+            query = query.where('scheduled_date', '<=', end_of_day)
         
         tasks = []
-        for doc in results:
-            task_id = doc.id
+        for doc in query.stream():
             data = doc.to_dict()
-            description = data.get('description')
-            task_status = data.get('status')
+            # Convert timestamps
+            created_at = cls._convert_timestamp(data.get('created_at'))
+            scheduled_date = cls._convert_timestamp(data.get('scheduled_date'))
+            completed_at = cls._convert_timestamp(data.get('completed_at'))
             
-            # Handle Firestore timestamp
-            created_at = data.get('created_at')
-            if isinstance(created_at, firestore.Timestamp):
-                created_at = created_at.datetime
-            
-            # Parse scheduled date if available
-            task_scheduled_date = None
-            if 'scheduled_date' in data:
-                try:
-                    task_scheduled_date = datetime.strptime(data['scheduled_date'], '%Y-%m-%d')
-                except ValueError:
-                    pass
-            
-            task = Task(task_id, user_id, description, task_status, created_at, task_scheduled_date)
+            task = cls(
+                task_id=doc.id,
+                user_id=data.get('user_id'),
+                description=data.get('description'),
+                status=data.get('status', cls.STATUS_PENDING),
+                created_at=created_at,
+                scheduled_date=scheduled_date,
+                completed_at=completed_at,
+                tracking_type=data.get('tracking_type', cls.TRACKING_TYPE_HUMAN)
+            )
             tasks.append(task)
-        
-        # Sort by creation time (newest first)
-        tasks.sort(key=lambda t: t.created_at if t.created_at else datetime.min, reverse=True)
-        
+            
         return tasks
     
     def update(self):
@@ -220,4 +204,14 @@ class Task:
     def delete(self):
         """Delete the task from the database"""
         db = get_db()
-        db.collection('tasks').document(self.task_id).delete() 
+        db.collection('tasks').document(self.task_id).delete()
+
+    @staticmethod
+    def _convert_timestamp(timestamp):
+        """Convert a timestamp to datetime"""
+        if isinstance(timestamp, datetime):
+            return timestamp
+        if hasattr(timestamp, 'seconds'):
+            # Handle server timestamp
+            return datetime.fromtimestamp(timestamp.seconds)
+        return None 

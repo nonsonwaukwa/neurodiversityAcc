@@ -146,50 +146,49 @@ class CheckIn:
             list: List of check-ins
         """
         db = get_db()
+        # First get by user_id only
         query = db.collection('checkins').where('user_id', '==', user_id)
         
-        # Apply type filter
-        if checkin_type:
-            query = query.where('checkin_type', '==', checkin_type)
-        
-        # Apply response filter if specified
-        if is_response is not None:
-            query = query.where('is_response', '==', is_response)
-        
-        # Get results ordered by creation time (newest first)
-        query = query.order_by('created_at', direction="DESCENDING")
-        
-        # Apply limit if specified
-        if limit:
-            query = query.limit(limit)
-        
+        # Then filter in memory for other conditions
         results = query.stream()
-        
         checkins = []
+        
         for doc in results:
             data = doc.to_dict()
             
-            # Skip if before start_date
-            if start_date and data.get('created_at') and data['created_at'] < start_date:
+            # Apply filters in memory
+            if checkin_type and data.get('type') != checkin_type:
                 continue
-            
-            checkin_id = doc.id
-            user_id = data.get('user_id')
-            response = data.get('response')
-            checkin_type = data.get('checkin_type')
-            sentiment_score = data.get('sentiment_score')
-            created_at = data.get('created_at')
+                
+            if start_date and data.get('created_at') < start_date:
+                continue
+                
+            if is_response is not None:
+                is_system_message = data.get('tracking_type') == CheckIn.TRACKING_TYPE_AI
+                if is_response and is_system_message:
+                    continue
+                if not is_response and not is_system_message:
+                    continue
             
             checkin = CheckIn(
-                checkin_id=checkin_id,
-                user_id=user_id,
-                response=response,
-                checkin_type=checkin_type,
-                sentiment_score=sentiment_score,
-                created_at=created_at
+                checkin_id=doc.id,
+                user_id=data.get('user_id'),
+                response=data.get('response'),
+                checkin_type=data.get('type'),
+                sentiment_score=data.get('sentiment_score'),
+                created_at=data.get('created_at'),
+                tracking_type=data.get('tracking_type', CheckIn.TRACKING_TYPE_AI),
+                input_method=data.get('input_method', CheckIn.INPUT_METHOD_WHATSAPP)
             )
             checkins.append(checkin)
         
+        # Sort by created_at (newest first)
+        checkins.sort(key=lambda x: x.created_at if x.created_at else datetime.min, reverse=True)
+        
+        # Apply limit
+        if limit:
+            checkins = checkins[:limit]
+            
         return checkins
     
     def update_sentiment_score(self, sentiment_score):

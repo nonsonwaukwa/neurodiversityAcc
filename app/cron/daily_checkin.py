@@ -8,6 +8,7 @@ from app.services.enhanced_analytics import EnhancedAnalyticsService
 from app.services.conversation_analytics import ConversationAnalyticsService
 import logging
 from datetime import datetime
+from flask import current_app
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -59,7 +60,7 @@ def send_daily_checkin():
 
 def process_daily_response(user, message_text, sentiment_score):
     """
-    Process a response to a daily check-in
+    Process a response to a daily check-in and follow up with appropriate task planning
     
     Args:
         user (User): The user who responded
@@ -115,26 +116,52 @@ def process_daily_response(user, message_text, sentiment_score):
     if streak_maintained and streak_count > 1:
         streak_message = f"\n🔥 Amazing! You've maintained a {streak_count}-day streak!"
     
-    if sentiment_score < -0.3:  # Overwhelmed/negative sentiment
-        # Offer support and simplified options
+    # Get sentiment thresholds from config
+    negative_threshold = current_app.config.get('SENTIMENT_THRESHOLD_NEGATIVE', -0.2)
+    
+    if sentiment_score < negative_threshold:  # Overwhelmed/negative sentiment
+        # Offer support and simplified options with a gentle transition to task planning
         message = (
-            f"I hear you, and it sounds like today might be feeling a bit heavy. That's completely okay and normal. 💜{streak_message}\n"
-            "Would you like to take a gentle approach today? Perhaps:"
+            f"I hear you, and it sounds like today might be feeling a bit heavy. That's completely okay and normal. 💜{streak_message}\n\n"
+            "Let's take a gentle approach today. Would you like to:"
         )
-        send_support_options(user, message)
+        buttons = [
+            {
+                "id": "one_task",
+                "title": "Focus on One Small Task"
+            },
+            {
+                "id": "rest_today",
+                "title": "Rest & Recharge Today"
+            },
+            {
+                "id": "support_needed",
+                "title": "Need Some Support"
+            }
+        ]
+        whatsapp_service.send_interactive_message(
+            user.user_id,
+            "Taking it Easy",
+            message,
+            buttons
+        )
     else:
         # For neutral or positive sentiment
         acknowledgment = _get_mood_acknowledgment(previous_sentiment, sentiment_score, sentiment_trend)
         
         if user.planning_type == 'weekly':
-            # For weekly planners, show their pre-set tasks for today
-            show_todays_tasks(user, f"{acknowledgment}{streak_message}")
+            # For weekly planners, show their pre-set tasks for today with option to adjust
+            show_todays_tasks(user, f"{acknowledgment}{streak_message}\n\nHere's what you planned for today. Feel free to adjust these if needed:")
         else:
-            # For daily planners, ask for up to 3 tasks
-            response = f"{acknowledgment}{streak_message}\nIf you'd like, you could share what you might focus on today. No pressure - you could list 1-3 things that feel manageable, or we can just check in."
+            # For daily planners, ask for tasks with a supportive tone
+            response = (
+                f"{acknowledgment}{streak_message}\n\n"
+                "What would you like to focus on today? You can share 1-3 tasks that feel manageable, "
+                "or we can just take it one step at a time. 💫"
+            )
             whatsapp_service.send_message(user.user_id, response)
     
-    logger.info(f"Processed daily check-in response from {user.user_id}")
+    logger.info(f"Processed daily check-in response and task planning for {user.user_id}")
 
 def _get_previous_sentiment(user_id):
     """
@@ -313,40 +340,42 @@ def handle_rest_request(user):
     
     logger.info(f"Processed rest request for {user.user_id}")
 
-def show_todays_tasks(user, acknowledgment=None):
+def show_todays_tasks(user, intro_message):
     """
-    Show the user their tasks scheduled for today
+    Show and optionally adjust today's tasks for a user
     
     Args:
-        user (User): The user to show tasks to
-        acknowledgment (str, optional): Personalized acknowledgment to include
+        user (User): The user to show tasks for
+        intro_message (str): Introductory message to show before tasks
     """
     whatsapp_service = get_whatsapp_service(user.account_index)
+    task_service = get_task_service()
     
-    # Get today's date
+    # Get today's tasks
     today = datetime.now()
+    tasks = task_service.get_tasks_for_date(user.user_id, today)
     
-    # Get tasks scheduled for today
-    tasks = Task.get_for_user(user.user_id, scheduled_date=today)
-    
-    prefix = acknowledgment if acknowledgment else ""
-    
-    if tasks:
-        # Format task list
-        task_list = "\n".join([f"- {task.description}" for task in tasks])
-        
-        message = f"{prefix} Here are the gentle intentions you set for today:\n{task_list}\n\nWould you like to explore any of these when you feel ready? Remember, there's no pressure - these are just guides, not obligations. 💫"
+    if not tasks:
+        message = (
+            f"{intro_message}\n\n"
+            "You don't have any tasks planned for today yet. "
+            "Would you like to set some gentle intentions for the day?"
+        )
         whatsapp_service.send_message(user.user_id, message)
-        
-        # Send buttons for each task
-        for task in tasks:
-            send_task_buttons(user, task)
-    else:
-        # No tasks scheduled
-        message = f"{prefix} You don't have any specific intentions set for today, which is completely okay. Would you like to add something small that might feel nurturing or helpful?"
-        whatsapp_service.send_message(user.user_id, message)
+        return
     
-    logger.info(f"Showed today's tasks to {user.user_id}")
+    # Format tasks with status
+    task_list = "\n".join([f"• {task.description}" for task in tasks])
+    
+    message = (
+        f"{intro_message}\n\n"
+        f"Your tasks for today:\n{task_list}\n\n"
+        "You can:\n"
+        "• Mark tasks as done ✓\n"
+        "• Update their status 🔄\n"
+        "• Adjust them if needed 📝"
+    )
+    whatsapp_service.send_message(user.user_id, message)
 
 def send_daily_reminders():
     """
@@ -434,4 +463,41 @@ def handle_task_creation(user, task_description):
     # Send task buttons
     send_task_buttons(user, task)
     
-    logger.info(f"Created task for {user.user_id}: {task_description}") 
+    logger.info(f"Created task for {user.user_id}: {task_description}")
+
+def handle_task_button_response(user, button_id):
+    """
+    Handle responses to task-related buttons
+    
+    Args:
+        user (User): The user who responded
+        button_id (str): The ID of the button pressed
+    """
+    whatsapp_service = get_whatsapp_service(user.account_index)
+    
+    if button_id == "one_task":
+        message = (
+            "What's one small, manageable thing you'd like to focus on today? "
+            "It could be as simple as drinking water or taking a short walk. "
+            "Remember, every tiny step counts. 🌱"
+        )
+        whatsapp_service.send_message(user.user_id, message)
+    
+    elif button_id == "rest_today":
+        message = (
+            "Taking time to rest is just as important as being active. "
+            "I'll be here when you're ready to plan tasks again. "
+            "Is there anything you need support with today? 💜"
+        )
+        whatsapp_service.send_message(user.user_id, message)
+    
+    elif button_id == "support_needed":
+        message = (
+            "I'm here to support you. Would you like to:\n\n"
+            "• Talk through what's on your mind\n"
+            "• Get some encouragement\n"
+            "• Break down a task into smaller steps\n"
+            "• Just have someone listen\n\n"
+            "Let me know what would help most right now. 💗"
+        )
+        whatsapp_service.send_message(user.user_id, message) 

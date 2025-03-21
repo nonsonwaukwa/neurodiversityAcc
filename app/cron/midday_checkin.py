@@ -9,15 +9,15 @@ import logging
 # Set up logger
 logger = logging.getLogger(__name__)
 
-def send_daily_tasks():
-    """Send daily task prompts to all users from both accounts based on their check-in responses"""
-    logger.info("Running daily tasks cron job")
+def send_midday_checkin():
+    """Send midday check-ins to users with active tasks to check their progress"""
+    logger.info("Running midday check-in cron job")
     
     # Get all users
     users = User.get_all()
     
     if not users:
-        logger.info("No users found for daily tasks")
+        logger.info("No users found for midday check-in")
         return
     
     # Group users by account
@@ -28,8 +28,8 @@ def send_daily_tasks():
             users_by_account[account_index] = []
         users_by_account[account_index].append(user)
     
-    # Time threshold for recent check-ins (last 12 hours)
-    time_threshold = datetime.now() - timedelta(hours=12)
+    # Time threshold for recent check-ins (last 6 hours)
+    time_threshold = datetime.now() - timedelta(hours=6)
     
     # Sentiment thresholds
     positive_threshold = current_app.config.get('SENTIMENT_THRESHOLD_POSITIVE', 0.5)
@@ -43,16 +43,19 @@ def send_daily_tasks():
         # Process each user in this account
         for user in account_users:
             try:
+                # Get user's active tasks
+                task_service = get_task_service()
+                active_tasks = task_service.get_active_tasks(user.user_id)
+                
+                if not active_tasks:
+                    logger.info(f"No active tasks found for user {user.user_id}, skipping midday check-in")
+                    continue
+                
                 # Get the user's most recent check-in
                 recent_checkins = CheckIn.get_for_user(user.user_id, CheckIn.TYPE_DAILY, limit=1)
                 
                 if not recent_checkins:
-                    logger.info(f"No recent check-ins found for user {user.user_id} (account {account_index})")
-                    # Send default message for users without recent check-ins
-                    whatsapp_service.send_message(
-                        user.user_id,
-                        "What tasks would you like to focus on today?"
-                    )
+                    logger.info(f"No recent check-ins found for user {user.user_id}")
                     continue
                 
                 recent_checkin = recent_checkins[0]
@@ -66,18 +69,18 @@ def send_daily_tasks():
                 sentiment_score = recent_checkin.sentiment_score
                 
                 if sentiment_score is None:
-                    # Send default message if no sentiment score
+                    # Default message for no sentiment score
                     whatsapp_service.send_message(
                         user.user_id,
-                        "What tasks would you like to focus on today?"
+                        "How are your tasks going? You can mark them as done, in progress, or stuck."
                     )
                 
                 elif sentiment_score < negative_threshold:
-                    # Negative sentiment - send simplified options
+                    # Negative sentiment - offer support and simplified options
                     buttons = [
                         {
-                            "id": "one_task",
-                            "title": "One Small Task"
+                            "id": "support_needed",
+                            "title": "Need Support"
                         },
                         {
                             "id": "rest_today",
@@ -87,19 +90,23 @@ def send_daily_tasks():
                     
                     whatsapp_service.send_interactive_message(
                         user.user_id,
-                        "Task Planning",
-                        "It seems you're having a tough day. Would you like to focus on just one small task, or would you prefer to rest today?",
+                        "Task Progress Check",
+                        "I notice you might be having a tough time. Would you like some support with your tasks, or would you prefer to rest today?",
                         buttons
                     )
                 
                 else:
-                    # Positive or neutral sentiment - ask for tasks
-                    whatsapp_service.send_message(
-                        user.user_id,
-                        "What tasks would you like to focus on today? You can list 1-3 tasks."
+                    # Positive or neutral sentiment - check task progress
+                    task_list = "\n".join([f"• {task.description}" for task in active_tasks])
+                    message = (
+                        "How are your tasks going?\n\n"
+                        f"Your active tasks:\n{task_list}\n\n"
+                        "You can mark them as done, in progress, or stuck."
                     )
+                    
+                    whatsapp_service.send_message(user.user_id, message)
                 
-                logger.info(f"Successfully processed daily tasks for user {user.user_id} (account {account_index})")
+                logger.info(f"Successfully processed midday check-in for user {user.user_id} (account {account_index})")
             
             except Exception as e:
-                logger.error(f"Error processing daily tasks for user {user.user_id}: {e}") 
+                logger.error(f"Error processing midday check-in for user {user.user_id}: {e}") 

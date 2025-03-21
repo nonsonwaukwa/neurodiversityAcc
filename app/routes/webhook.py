@@ -10,7 +10,7 @@ from config.firebase_config import get_db
 from app.services.message_handler import MessageHandler
 from app.services.voice import get_voice_service
 from app.services.sentiment import get_sentiment_service
-from app.cron.daily_checkin import process_daily_response
+from app.cron.daily_checkin import process_daily_response, handle_task_button_response, handle_task_selection
 from app.cron.end_of_day_checkin import process_end_of_day_response
 from app.models.message import is_duplicate_message, record_message
 from app.tools.voice_monitor import get_voice_monitor
@@ -144,10 +144,19 @@ def whatsapp_webhook():
                 button_id = button_reply.get('id')
                 logger.info(f"Button ID: {button_id}")
                 
-                # Handle the button response
-                from app.routes.button_handler import handle_button_response
-                handle_button_response(user, button_id)
-                return jsonify({"status": "success", "message": "Button response processed"}), 200
+                # Handle task-related buttons
+                if button_id in ['one_task', 'rest_today', 'support_needed']:
+                    handle_task_button_response(user, button_id)
+                    return jsonify({"status": "success", "message": "Task button response processed"}), 200
+                
+                # Handle other button types (if any)
+                if button_id.startswith('select_task_'):
+                    task_id = button_id.replace('select_task_', '')
+                    handle_task_selection(user, task_id)
+                    return jsonify({"status": "success", "message": "Task selection processed"}), 200
+                
+                logger.warning(f"Unknown button ID received: {button_id}")
+                return jsonify({"status": "error", "message": "Unknown button type"}), 400
         
         elif message_type == 'audio':
             # Handle voice notes
@@ -162,8 +171,8 @@ def whatsapp_webhook():
             # Check if the voice note is too long (over 2 minutes)
             if audio_duration and audio_duration > 120:
                 logger.warning(f"Voice note is too long: {audio_duration}s")
-                whatsapp_service.send_message(
-                    from_number,
+                                whatsapp_service.send_message(
+                                    from_number,
                     "I noticed your voice note is quite long. For better transcription accuracy, please try to keep voice notes under 2 minutes."
                 )
             
@@ -276,10 +285,10 @@ def whatsapp_webhook():
                 )
                 
                 # Thank the user for feedback
-                whatsapp_service.send_message(
-                    from_number,
+                    whatsapp_service.send_message(
+                        from_number,
                     "Thank you for the feedback! It helps us improve our voice recognition."
-                )
+                    )
                 return jsonify({"status": "success", "message": "Feedback processed"}), 200
         
         return jsonify({"status": "success", "message": "Message processed"}), 200

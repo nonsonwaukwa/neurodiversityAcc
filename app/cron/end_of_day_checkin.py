@@ -5,6 +5,7 @@ from app.services.whatsapp import get_whatsapp_service
 from app.services.analytics import get_analytics_service
 from app.services.enhanced_analytics import EnhancedAnalyticsService
 from app.services.conversation_analytics import ConversationAnalyticsService
+from app.services.tasks import get_task_service
 import logging
 from datetime import datetime
 
@@ -42,6 +43,7 @@ def send_end_of_day_checkin():
                 tasks = Task.get_for_user(user.user_id, scheduled_date=datetime.now())
                 has_checked_in = CheckIn.has_checked_in_today(user.user_id)
                 completed_tasks = [t for t in tasks if t.status == 'done']
+                incomplete_tasks = [t for t in tasks if t.status != 'done']
                 
                 # Format the message with the user's name
                 name = user.name.split('_')[0] if '_' in user.name else user.name
@@ -53,17 +55,29 @@ def send_end_of_day_checkin():
                         "comfortable - a voice note, message, or even just a quick emoji. No pressure, "
                         "just here to listen 🌙"
                     )
-                elif tasks and completed_tasks:
+                elif tasks and completed_tasks and not incomplete_tasks:
                     message = (
-                        f"Hi {name} 💫 I see you completed {len(completed_tasks)} tasks today - "
-                        "that's wonderful! Would you like to share how your day went? You can send "
+                        f"Hi {name} 💫 Amazing work today! You completed all your tasks - "
+                        "that's fantastic! Would you like to share how your day went? You can send "
                         "a voice note or message, whatever feels most natural 🌙"
                     )
-                elif tasks and not completed_tasks:
+                elif tasks and completed_tasks and incomplete_tasks:
+                    task_list = "\n".join([f"• {task.description}" for task in incomplete_tasks])
                     message = (
-                        f"Hi {name} 💫 How did your day go? Some days are for doing, others "
-                        "for being - both are equally valid. Feel free to share your thoughts or "
-                        "feelings in any way that feels comfortable 🌙"
+                        f"Hi {name} 💫 I see you completed {len(completed_tasks)} tasks today - "
+                        "that's wonderful! You still have some tasks that weren't marked as done:\n\n"
+                        f"{task_list}\n\n"
+                        "Would you like to update their status or share how your day went? "
+                        "You can mark them as done, in progress, or stuck, or just share your thoughts 🌙"
+                    )
+                elif tasks and not completed_tasks:
+                    task_list = "\n".join([f"• {task.description}" for task in tasks])
+                    message = (
+                        f"Hi {name} 💫 How did your day go? I notice you have some tasks that weren't marked as done:\n\n"
+                        f"{task_list}\n\n"
+                        "Some days are for doing, others for being - both are equally valid. "
+                        "Would you like to update their status or just share your thoughts? "
+                        "You can mark them as done, in progress, or stuck 🌙"
                     )
                 
                 logger.info(f"Sending end of day check-in to user {user.user_id} (account {account_index})")

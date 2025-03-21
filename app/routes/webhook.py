@@ -97,8 +97,17 @@ def whatsapp_webhook():
         # Get WhatsApp service
         whatsapp_service = get_whatsapp_service(user.account_index)
         
+        # Initialize message text
+        message_text = None
+        is_voice_note = False
+        
+        # Handle different message types
+        if message_type == 'text':
+            message_text = message.get('text', {}).get('body', '').strip()
+            logger.info(f"Message Content: {message_text}")
+        
         # Handle welcome flow for new users
-        if is_new_user and message_type == 'text' and message_text.lower() in ['hi', 'hello', 'hey']:
+        if is_new_user and message_type == 'text' and message_text and message_text.lower() in ['hi', 'hello', 'hey']:
             welcome_message = (
                 "👋 Hi there! I'm your friendly accountability partner. I'm here to help you navigate your day, "
                 "celebrate your wins (big or small), and work through any challenges.\n\n"
@@ -109,7 +118,7 @@ def whatsapp_webhook():
             return jsonify({"status": "success", "message": "Welcome message sent"}), 200
         
         # Handle name response for new users
-        if is_new_user and message_type == 'text' and not message_text.lower() in ['hi', 'hello', 'hey']:
+        if is_new_user and message_type == 'text' and message_text and not message_text.lower() in ['hi', 'hello', 'hey']:
             # Update user's name
             user.name = message_text.strip()
             user.update()
@@ -127,15 +136,6 @@ def whatsapp_webhook():
             whatsapp_service.send_message(from_number, confirmation)
             return jsonify({"status": "success", "message": "User name updated"}), 200
         
-        # Initialize message text
-        message_text = None
-        is_voice_note = False
-        
-        # Handle different message types
-        if message_type == 'text':
-            message_text = message.get('text', {}).get('body', '').strip()
-            logger.info(f"Message Content: {message_text}")
-            
         elif message_type == 'interactive':
             # Handle button clicks
             interactive = message.get('interactive', {})
@@ -162,8 +162,8 @@ def whatsapp_webhook():
             # Check if the voice note is too long (over 2 minutes)
             if audio_duration and audio_duration > 120:
                 logger.warning(f"Voice note is too long: {audio_duration}s")
-                                whatsapp_service.send_message(
-                                    from_number,
+                whatsapp_service.send_message(
+                    from_number,
                     "I noticed your voice note is quite long. For better transcription accuracy, please try to keep voice notes under 2 minutes."
                 )
             
@@ -276,10 +276,10 @@ def whatsapp_webhook():
                 )
                 
                 # Thank the user for feedback
-                    whatsapp_service.send_message(
-                        from_number,
+                whatsapp_service.send_message(
+                    from_number,
                     "Thank you for the feedback! It helps us improve our voice recognition."
-                    )
+                )
                 return jsonify({"status": "success", "message": "Feedback processed"}), 200
         
         return jsonify({"status": "success", "message": "Message processed"}), 200

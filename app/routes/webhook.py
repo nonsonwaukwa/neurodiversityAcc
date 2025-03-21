@@ -254,14 +254,25 @@ def whatsapp_webhook():
         # Get the most recent check-in to determine its type
         recent_checkins = CheckIn.get_for_user(user.user_id, limit=1, is_response=False)
         if recent_checkins:
-            checkin_type = recent_checkins[0].type
-            if checkin_type == CheckIn.TYPE_END_OF_DAY:
-                process_end_of_day_response(user, message_text, sentiment_score)
+            recent_checkin = recent_checkins[0]
+            # Only process as a check-in response if it's from today
+            today = datetime.now().date()
+            checkin_date = recent_checkin.created_at.date()
+            
+            if checkin_date == today:
+                checkin_type = recent_checkin.type
+                if checkin_type == CheckIn.TYPE_END_OF_DAY:
+                    process_end_of_day_response(user, message_text, sentiment_score)
+                else:
+                    process_daily_response(user, message_text, sentiment_score)
             else:
-                process_daily_response(user, message_text, sentiment_score)
+                # If check-in is old, treat as a normal message
+                message_handler = MessageHandler()
+                message_handler.handle_message(user, message_text)
         else:
-            # Default to daily response if no recent check-in found
-            process_daily_response(user, message_text, sentiment_score)
+            # Default to message handler if no recent check-in found
+            message_handler = MessageHandler()
+            message_handler.handle_message(user, message_text)
         
         # If this was a voice note, let's also remind the user that they can use voice notes for check-ins
         if is_voice_note and random.random() < 0.3:  # Only remind occasionally (30% chance)
@@ -295,4 +306,4 @@ def whatsapp_webhook():
         
     except Exception as e:
         logger.error(f"Error in webhook: {str(e)}")
-        return jsonify({"status": "error", "message": str(e)}), 500 
+        return jsonify({"status": "error", "message": str(e)}), 500

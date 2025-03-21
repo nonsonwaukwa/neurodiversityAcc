@@ -19,20 +19,59 @@ class WhatsAppService:
             account_index (int): Index of the Meta account to use (0 or 1)
         """
         self.account_index = account_index
-        self.api_url = current_app.config.get('WHATSAPP_API_URL')
+        
+        # Get base API URL, ensure it doesn't end with a slash
+        api_url = current_app.config.get('WHATSAPP_API_URL')
+        if not api_url:
+            api_url = os.environ.get('WHATSAPP_API_URL', 'https://graph.facebook.com/v17.0')
+        self.api_url = api_url.rstrip('/')
         
         # Get credentials for the specified account
         phone_number_ids = current_app.config.get('WHATSAPP_PHONE_NUMBER_IDS', [])
         access_tokens = current_app.config.get('WHATSAPP_ACCESS_TOKENS', [])
         
+        # If not in config, try environment variables
+        if not phone_number_ids:
+            phone_number_id = os.environ.get('WHATSAPP_PHONE_NUMBER_ID')
+            if phone_number_id:
+                phone_number_ids = [phone_number_id]
+                logger.info("Using phone number ID from environment variable")
+        
+        if not access_tokens:
+            access_token = os.environ.get('WHATSAPP_ACCESS_TOKEN')
+            if access_token:
+                access_tokens = [access_token]
+                logger.info("Using access token from environment variable")
+        
+        logger.debug(f"API URL: {self.api_url}")
+        logger.debug(f"Phone Number IDs available: {len(phone_number_ids) if phone_number_ids else 0}")
+        logger.debug(f"Access Tokens available: {len(access_tokens) if access_tokens else 0}")
+        
         if not phone_number_ids or not access_tokens or len(phone_number_ids) <= account_index or len(access_tokens) <= account_index:
-            raise ValueError(f"WhatsApp API configuration for account {account_index} is incomplete")
+            error_msg = f"WhatsApp API configuration for account {account_index} is incomplete:"
+            error_msg += f"\n- Phone Number IDs: {'Yes' if phone_number_ids else 'No'}"
+            error_msg += f"\n- Access Tokens: {'Yes' if access_tokens else 'No'}"
+            error_msg += f"\n- Account Index Valid: {'Yes' if phone_number_ids and len(phone_number_ids) > account_index else 'No'}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
         
         self.phone_number_id = phone_number_ids[account_index]
         self.access_token = access_tokens[account_index]
         
         if not all([self.api_url, self.phone_number_id, self.access_token]):
-            raise ValueError(f"WhatsApp API configuration for account {account_index} is incomplete")
+            error_msg = "WhatsApp API configuration is incomplete:"
+            error_msg += f"\n- API URL: {'Yes' if self.api_url else 'No'}"
+            error_msg += f"\n- Phone Number ID: {'Yes' if self.phone_number_id else 'No'}"
+            error_msg += f"\n- Access Token: {'Yes' if self.access_token else 'No'}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+        logger.info(f"Initialized WhatsApp service with API URL: {self.api_url}")
+        logger.info(f"Using phone number ID: {self.phone_number_id}")
+    
+    def _get_message_url(self):
+        """Get the properly formatted URL for sending messages"""
+        return f"{self.api_url}/{self.phone_number_id}/messages"
     
     def send_message(self, recipient_number, message_text):
         """
@@ -43,28 +82,50 @@ class WhatsAppService:
             message_text (str): The message to send
             
         Returns:
-            dict: The API response
+            bool: Success status
         """
-        url = f"{self.api_url}/{self.phone_number_id}/messages"
-        
-        headers = {
-            'Authorization': f'Bearer {self.access_token}',
-            'Content-Type': 'application/json'
-        }
-        
-        data = {
-            'messaging_product': 'whatsapp',
-            'recipient_type': 'individual',
-            'to': recipient_number,
-            'type': 'text',
-            'text': {
-                'body': message_text
+        try:
+            url = self._get_message_url()
+            logger.debug(f"Sending message to URL: {url}")
+            logger.debug(f"Using phone_number_id: {self.phone_number_id}")
+            
+            headers = {
+                'Authorization': f'Bearer {self.access_token}',
+                'Content-Type': 'application/json'
             }
-        }
-        
-        response = requests.post(url, headers=headers, data=json.dumps(data))
-        
-        return response.json() if response.status_code == 200 else None
+            
+            data = {
+                'messaging_product': 'whatsapp',
+                'recipient_type': 'individual',
+                'to': recipient_number,
+                'type': 'text',
+                'text': {
+                    'body': message_text
+                }
+            }
+            
+            logger.debug(f"Request data: {json.dumps(data)}")
+            
+            response = requests.post(url, headers=headers, json=data)
+            
+            logger.debug(f"Response status code: {response.status_code}")
+            logger.debug(f"Response content: {response.text}")
+            
+            if response.status_code == 200:
+                logger.info(f"Successfully sent message to {recipient_number}")
+                return True
+            else:
+                logger.error(f"Failed to send message. Status: {response.status_code}, Response: {response.text}")
+                return False
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Network error sending message: {str(e)}")
+            return False
+        except Exception as e:
+            logger.error(f"Error sending message: {str(e)}")
+            logger.error(f"API URL: {self.api_url}")
+            logger.error(f"Phone Number ID: {self.phone_number_id}")
+            return False
     
     def send_interactive_message(self, recipient_number, header_text, body_text, buttons):
         """
@@ -455,6 +516,152 @@ class WhatsAppService:
         except Exception as e:
             logger.error(f"Error getting account info: {str(e)}")
             return None
+
+    def send_interactive_with_fallback(self, to, header_text, body_text, buttons):
+        """
+        Attempts to send an interactive message with buttons, falls back to numbered options if not available.
+        
+        Args:
+            to (str): Recipient phone number
+            header_text (str): Header text for the message
+            body_text (str): Main body text
+            buttons (list): List of button objects with 'id' and 'title' keys
+        
+        Returns:
+            bool: Success status
+        """
+        try:
+            # First attempt to send interactive message
+            url = self._get_message_url()
+            logger.debug(f"Sending interactive message to URL: {url}")
+            
+            headers = {
+                "Authorization": f"Bearer {self.access_token}",
+                "Content-Type": "application/json"
+            }
+            
+            data = {
+                "messaging_product": "whatsapp",
+                "to": to,
+                "type": "interactive",
+                "interactive": {
+                    "type": "button",
+                    "header": {
+                        "type": "text",
+                        "text": header_text
+                    },
+                    "body": {
+                        "text": body_text
+                    },
+                    "action": {
+                        "buttons": [{"type": "reply", "reply": {"id": btn["id"], "title": btn["title"]}} for btn in buttons]
+                    }
+                }
+            }
+            
+            response = requests.post(url, headers=headers, json=data)
+            logger.debug(f"Interactive message response: {response.text}")
+            
+            # If interactive message succeeds, return True
+            if response.status_code == 200:
+                logger.info(f"Successfully sent interactive message to {to}")
+                return True
+            
+            # If we get an error about test mode or interactive messages not being available,
+            # fall back to numbered response
+            logger.warning(f"Interactive message failed: {response.text}. Falling back to numbered response.")
+            
+            # Format numbered response
+            numbered_message = f"{header_text}\n\n{body_text}\n\n"
+            for i, btn in enumerate(buttons, 1):
+                numbered_message += f"{i}. {btn['title']}\n"
+            numbered_message += "\nJust reply with the number of your choice."
+            
+            # Send as regular message
+            return self.send_message(to, numbered_message)
+        
+        except Exception as e:
+            logger.error(f"Error sending interactive message with fallback: {str(e)}")
+            return False
+
+    def send_list_message_with_fallback(self, to, header_text, body_text, button_text, sections):
+        """
+        Attempts to send a list message, falls back to numbered options if not available.
+        
+        Args:
+            to (str): Recipient phone number
+            header_text (str): Header text for the message
+            body_text (str): Main body text
+            button_text (str): Text for the list button (e.g., "View Options")
+            sections (list): List of section objects, each containing:
+                - title: Section title
+                - rows: List of row objects with 'id' and 'title' (and optional 'description')
+        
+        Returns:
+            bool: Success status
+        """
+        try:
+            # First attempt to send list message
+            url = self._get_message_url()
+            logger.debug(f"Sending list message to URL: {url}")
+            
+            headers = {
+                "Authorization": f"Bearer {self.access_token}",
+                "Content-Type": "application/json"
+            }
+            
+            data = {
+                "messaging_product": "whatsapp",
+                "to": to,
+                "type": "interactive",
+                "interactive": {
+                    "type": "list",
+                    "header": {
+                        "type": "text",
+                        "text": header_text
+                    },
+                    "body": {
+                        "text": body_text
+                    },
+                    "action": {
+                        "button": button_text,
+                        "sections": sections
+                    }
+                }
+            }
+            
+            response = requests.post(url, headers=headers, json=data)
+            logger.debug(f"List message response: {response.text}")
+            
+            # If list message succeeds, return True
+            if response.status_code == 200:
+                logger.info(f"Successfully sent list message to {to}")
+                return True
+            
+            # If we get an error, fall back to numbered response
+            logger.warning(f"List message failed: {response.text}. Falling back to numbered response.")
+            
+            # Format numbered response
+            numbered_message = f"{header_text}\n\n{body_text}\n\n"
+            option_number = 1
+            
+            for section in sections:
+                numbered_message += f"\n{section['title']}:\n"
+                for row in section['rows']:
+                    numbered_message += f"{option_number}. {row['title']}"
+                    if 'description' in row:
+                        numbered_message += f" - {row['description']}"
+                    numbered_message += "\n"
+                    option_number += 1
+            
+            numbered_message += "\nJust reply with the number of your choice."
+            
+            # Send as regular message
+            return self.send_message(to, numbered_message)
+            
+        except Exception as e:
+            logger.error(f"Error sending list message with fallback: {str(e)}")
+            return False
 
 # Create an instance of the service
 def get_whatsapp_service(account_index=0):

@@ -3,6 +3,7 @@ from firebase_admin import _apps
 
 health_bp = Blueprint('health', __name__)
 
+@health_bp.route('/', methods=['GET'])
 @health_bp.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint that verifies the application's status"""

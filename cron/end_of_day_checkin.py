@@ -123,18 +123,21 @@ def _send_end_of_day_checkin(user, whatsapp_service):
     
     message += (
         f"\nRemember: {self_care_tip}\n\n"
-        f"Would you like to:"
+        f"Would you like to:\n"
+        f"1. Reflect on today\n"
+        f"2. Plan for tomorrow\n"
+        f"3. Share your thoughts\n\n"
+        f"Just reply with what feels right for you 🌙"
     )
     
-    buttons = [
-        {"id": "reflect_day", "title": "Reflect on today"},
-        {"id": "plan_tomorrow", "title": "Plan tomorrow"},
-        {"id": "share_thoughts", "title": "Share thoughts"}
-    ]
-    
     try:
-        whatsapp_service.send_interactive_buttons(user.user_id, message, buttons)
-        logger.info(f"Successfully sent end of day check-in to user {user.user_id}")
+        response = whatsapp_service.send_message(user.user_id, message)
+        if response:
+            logger.info(f"Successfully sent end of day check-in to user {user.user_id}")
+            # Store this message as a check-in
+            CheckIn.create(user.user_id, message, CheckIn.TYPE_END_OF_DAY)
+        else:
+            logger.error(f"Failed to send end of day check-in to user {user.user_id}: No response from WhatsApp API")
     except Exception as e:
         logger.error(f"Failed to send end of day check-in to user {user.user_id}: {str(e)}")
         raise

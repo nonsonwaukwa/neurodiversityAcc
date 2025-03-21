@@ -171,8 +171,8 @@ def whatsapp_webhook():
             # Check if the voice note is too long (over 2 minutes)
             if audio_duration and audio_duration > 120:
                 logger.warning(f"Voice note is too long: {audio_duration}s")
-                                whatsapp_service.send_message(
-                                    from_number,
+                whatsapp_service.send_message(
+                    from_number,
                     "I noticed your voice note is quite long. For better transcription accuracy, please try to keep voice notes under 2 minutes."
                 )
             
@@ -285,14 +285,14 @@ def whatsapp_webhook():
                 )
                 
                 # Thank the user for feedback
-                    whatsapp_service.send_message(
-                        from_number,
+                whatsapp_service.send_message(
+                    from_number,
                     "Thank you for the feedback! It helps us improve our voice recognition."
-                    )
+                )
                 return jsonify({"status": "success", "message": "Feedback processed"}), 200
         
         return jsonify({"status": "success", "message": "Message processed"}), 200
         
     except Exception as e:
         logger.error(f"Error in webhook: {str(e)}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({"status": "error", "message": str(e)}), 500 

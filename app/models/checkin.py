@@ -11,6 +11,7 @@ class CheckIn:
     # Check-in type constants
     TYPE_DAILY = 'Daily'
     TYPE_WEEKLY = 'Weekly'
+    TYPE_END_OF_DAY = 'EndOfDay'
     
     # Tracking type constants
     TRACKING_TYPE_AI = 'AI'
@@ -169,7 +170,7 @@ class CheckIn:
             data = doc.to_dict()
             
             # Skip if before start_date
-            if start_date and data.get('created_at') and data['created_at'].datetime < start_date:
+            if start_date and data.get('created_at') and data['created_at'] < start_date:
                 continue
             
             checkin_id = doc.id
@@ -178,10 +179,6 @@ class CheckIn:
             checkin_type = data.get('checkin_type')
             sentiment_score = data.get('sentiment_score')
             created_at = data.get('created_at')
-            
-            # Convert timestamp to datetime
-            if created_at:
-                created_at = created_at.datetime
             
             checkin = CheckIn(
                 checkin_id=checkin_id,

@@ -11,6 +11,7 @@ from app.services.message_handler import MessageHandler
 from app.services.voice import get_voice_service
 from app.services.sentiment import get_sentiment_service
 from app.cron.daily_checkin import process_daily_response
+from app.cron.end_of_day_checkin import process_end_of_day_response
 from app.models.message import is_duplicate_message, record_message
 from app.tools.voice_monitor import get_voice_monitor
 import random
@@ -129,7 +130,7 @@ def whatsapp_webhook():
             if audio_duration and audio_duration > 120:
                 logger.warning(f"Voice note is too long: {audio_duration}s")
                 whatsapp_service.send_message(
-                    from_number, 
+                    from_number,
                     "I noticed your voice note is quite long. For better transcription accuracy, please try to keep voice notes under 2 minutes."
                 )
             
@@ -183,7 +184,7 @@ def whatsapp_webhook():
                     )
                     
                     whatsapp_service.send_message(
-                        from_number, 
+                        from_number,
                         "I couldn't understand your voice note. This might be due to background noise or audio quality. Could you please try again in a quieter environment, speak clearly, or send a text message instead?"
                     )
                     return jsonify({"status": "error", "message": "Voice transcription failed"}), 200
@@ -208,8 +209,17 @@ def whatsapp_webhook():
         # Update user's sentiment history
         user.add_sentiment_score(sentiment_score)
         
-        # Process the response
-        process_daily_response(user, message_text, sentiment_score)
+        # Get the most recent check-in to determine its type
+        recent_checkins = CheckIn.get_for_user(user.user_id, limit=1, is_response=False)
+        if recent_checkins:
+            checkin_type = recent_checkins[0].type
+            if checkin_type == CheckIn.TYPE_END_OF_DAY:
+                process_end_of_day_response(user, message_text, sentiment_score)
+            else:
+                process_daily_response(user, message_text, sentiment_score)
+        else:
+            # Default to daily response if no recent check-in found
+            process_daily_response(user, message_text, sentiment_score)
         
         # If this was a voice note, let's also remind the user that they can use voice notes for check-ins
         if is_voice_note and random.random() < 0.3:  # Only remind occasionally (30% chance)
@@ -219,7 +229,6 @@ def whatsapp_webhook():
         # Add a message handler for transcription feedback
         if message_handler.is_transcription_feedback(message_text):
             # Get the last transcription for this user
-            # This is a simplified approach - in production you might need to store the last transcription per user
             last_transcription = user.get_metadata('last_transcription')
             
             if last_transcription:
@@ -244,4 +253,4 @@ def whatsapp_webhook():
         
     except Exception as e:
         logger.error(f"Error in webhook: {str(e)}")
-        return jsonify({"status": "error", "message": str(e)}), 500 
+        return jsonify({"status": "error", "message": str(e)}), 500

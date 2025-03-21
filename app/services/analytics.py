@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from app.models.user import User
 from app.models.checkin import CheckIn
 from app.models.task import Task
@@ -116,21 +116,27 @@ class AnalyticsService:
             days (int): Number of days to analyze
             
         Returns:
-            dict: Sentiment analysis results
+            str: A description of the sentiment trend
         """
         user = User.get(user_id)
         if not user or not user.sentiment_history:
-            return {"trend": "neutral", "average": 0}
+            return "neutral"
             
         # Get sentiment scores in the timeframe
-        start_date = datetime.now() - timedelta(days=days)
-        recent_scores = [
-            score for date, score in user.sentiment_history.items()
-            if datetime.fromisoformat(date) >= start_date
-        ]
+        start_date = datetime.now(timezone.utc) - timedelta(days=days)
+        
+        # Get recent scores from sentiment history
+        recent_scores = []
+        for item in user.sentiment_history:
+            timestamp = item['timestamp']
+            # Make timestamp timezone-aware if it's naive
+            if timestamp.tzinfo is None:
+                timestamp = timestamp.replace(tzinfo=timezone.utc)
+            if timestamp >= start_date:
+                recent_scores.append(item['score'])
         
         if not recent_scores:
-            return {"trend": "neutral", "average": 0}
+            return "neutral"
             
         # Calculate trend
         average = sum(recent_scores) / len(recent_scores)
@@ -156,11 +162,16 @@ class AnalyticsService:
             elif first_avg - second_avg > 0.2:
                 trend = "declining"
         
-        return {
-            "trend": trend,
-            "average": average,
-            "samples": len(recent_scores)
+        # Convert trend to user-friendly message
+        trend_messages = {
+            "positive": "You've been maintaining a positive outlook 🌟",
+            "negative": "You've been having some challenging moments 💜",
+            "neutral": "You've been keeping steady 🌱",
+            "improving": "Your mood has been lifting up 🌅",
+            "declining": "You've been facing some difficulties 💗"
         }
+        
+        return trend_messages.get(trend, "You've been on your unique journey 🌈")
 
 def calculate_metrics(user_ids=None, days=30):
     """
@@ -221,8 +232,8 @@ def calculate_metrics(user_ids=None, days=30):
         
         # Get sentiment data
         sentiment_data = AnalyticsService.get_sentiment_trend(user.id, days=days)
-        if sentiment_data['samples'] > 0:
-            total_sentiment += sentiment_data['average']
+        if sentiment_data != "neutral":
+            total_sentiment += 1
             sentiment_count += 1
         
         # Get response rate

@@ -185,6 +185,30 @@ class Task:
             
         return tasks
     
+    @classmethod
+    def get_completed_for_user(cls, user_id, start_date=None):
+        """
+        Get completed tasks for a user within a date range
+        
+        Args:
+            user_id (str): The user's ID
+            start_date (datetime, optional): Start date for filtering tasks. If None, gets all completed tasks.
+            
+        Returns:
+            list: List of completed tasks
+        """
+        logger.debug(f"Getting completed tasks for user {user_id} from {start_date}")
+        
+        # Get tasks with status 'done'
+        tasks = cls.get_for_user(user_id, status=cls.STATUS_DONE)
+        
+        # Filter by start date if provided
+        if start_date:
+            tasks = [t for t in tasks if t.completed_at and t.completed_at >= start_date]
+            
+        logger.debug(f"Found {len(tasks)} completed tasks")
+        return tasks
+    
     def update(self):
         """Update the task in the database"""
         self.updated_at = datetime.now()
@@ -199,6 +223,8 @@ class Task:
             status (str): The new status
         """
         self.status = status
+        if status == self.STATUS_DONE:
+            self.completed_at = datetime.now()
         self.update()
     
     def delete(self):

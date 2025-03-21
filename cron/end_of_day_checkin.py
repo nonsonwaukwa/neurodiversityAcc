@@ -12,97 +12,132 @@ from app.services.enhanced_analytics import EnhancedAnalyticsService
 from app.services.conversation_analytics import ConversationAnalyticsService
 from app.services.tasks import get_task_service
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from flask import current_app
 
 # Set up logger
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)  # Set to DEBUG level
+
+# Add a console handler if not present
+if not logger.handlers:
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
 
 # Create Flask app and context
 app = create_app()
 app.app_context().push()
 
-def send_end_of_day_checkin():
-    """Send personalized end of day check-in messages to all users"""
+def send_end_of_day_checkins():
+    """Send end of day check-ins to all active users."""
     logger.info("Running end of day check-in cron job")
     
-    # Get all users
-    users = User.get_all()
-    
-    if not users:
-        logger.info("No users found for end of day check-in")
-        return
-    
-    # Group users by account
-    users_by_account = {}
-    for user in users:
-        account_index = user.account_index
-        if account_index not in users_by_account:
-            users_by_account[account_index] = []
-        users_by_account[account_index].append(user)
-    
-    # Process each account
-    for account_index, account_users in users_by_account.items():
-        # Get the WhatsApp service for this account
-        whatsapp_service = get_whatsapp_service(account_index)
+    try:
+        # Get all active users
+        users = User.get_all_active()
+        logger.debug(f"Found {len(users) if users else 0} active users")
         
-        # Process each user in this account
-        for user in account_users:
-            try:
-                # Get user's activity for the day
-                tasks = Task.get_for_user(user.user_id, scheduled_date=datetime.now())
-                has_checked_in = CheckIn.has_checked_in_today(user.user_id)
-                completed_tasks = [t for t in tasks if t.status == 'done']
-                incomplete_tasks = [t for t in tasks if t.status != 'done']
-                
-                # Format the message with the user's name
-                name = user.name.split('_')[0] if '_' in user.name else user.name
-                
-                # Generate personalized message based on day's activity
-                if not has_checked_in and not tasks:
-                    message = (
-                        f"Hi {name} 💫 How was your day? Feel free to share in any way that feels "
-                        "comfortable - a voice note, message, or even just a quick emoji. No pressure, "
-                        "just here to listen 🌙"
-                    )
-                elif tasks and completed_tasks and not incomplete_tasks:
-                    message = (
-                        f"Hi {name} 💫 Amazing work today! You completed all your tasks - "
-                        "that's fantastic! Would you like to share how your day went? You can send "
-                        "a voice note or message, whatever feels most natural 🌙"
-                    )
-                elif tasks and completed_tasks and incomplete_tasks:
-                    task_list = "\n".join([f"• {task.description}" for task in incomplete_tasks])
-                    message = (
-                        f"Hi {name} 💫 I see you completed {len(completed_tasks)} tasks today - "
-                        "that's wonderful! You still have some tasks that weren't marked as done:\n\n"
-                        f"{task_list}\n\n"
-                        "Would you like to update their status or share how your day went? "
-                        "You can mark them as done, in progress, or stuck, or just share your thoughts 🌙"
-                    )
-                elif tasks and not completed_tasks:
-                    task_list = "\n".join([f"• {task.description}" for task in tasks])
-                    message = (
-                        f"Hi {name} 💫 How did your day go? I notice you have some tasks that weren't marked as done:\n\n"
-                        f"{task_list}\n\n"
-                        "Some days are for doing, others for being - both are equally valid. "
-                        "Would you like to update their status or just share your thoughts? "
-                        "You can mark them as done, in progress, or stuck 🌙"
-                    )
-                
-                logger.info(f"Sending end of day check-in to user {user.user_id} (account {account_index})")
-                response = whatsapp_service.send_message(user.user_id, message)
-                
-                # Store this message as a check-in
-                CheckIn.create(user.user_id, message, CheckIn.TYPE_END_OF_DAY)
-                
-                if response:
-                    logger.info(f"Successfully sent end of day check-in to user {user.user_id}")
-                else:
-                    logger.error(f"Failed to send end of day check-in to user {user.user_id}")
+        if not users:
+            logger.info("No active users found for end of day check-ins")
+            return
+        
+        # Group users by account
+        users_by_account = {}
+        for user in users:
+            account_index = user.account_index
+            if account_index not in users_by_account:
+                users_by_account[account_index] = []
+            users_by_account[account_index].append(user)
+        
+        logger.debug(f"Grouped users into {len(users_by_account)} accounts")
+        
+        # Process each account
+        for account_index, account_users in users_by_account.items():
+            # Get the WhatsApp service for this account
+            whatsapp_service = get_whatsapp_service(account_index)
+            logger.debug(f"Processing {len(account_users)} users for account {account_index}")
             
-            except Exception as e:
-                logger.error(f"Error sending end of day check-in to user {user.user_id}: {e}")
+            # Process each user in this account
+            for user in account_users:
+                try:
+                    _send_end_of_day_checkin(user, whatsapp_service)
+                except Exception as e:
+                    logger.error(f"Error sending end of day check-in to user {user.user_id}: {e}", exc_info=True)
+                    
+    except Exception as e:
+        logger.error(f"Unexpected error in end of day check-ins: {e}", exc_info=True)
+
+def _send_end_of_day_checkin(user, whatsapp_service):
+    """
+    Send an end of day check-in message to a user
+    
+    Args:
+        user (User): The user to send check-in to
+        whatsapp_service (WhatsAppService): The WhatsApp service instance
+    """
+    logger.info(f"Sending end of day check-in to user {user.user_id}")
+    
+    # Get analytics about the user's day
+    analytics_service = get_analytics_service()
+    task_service = get_task_service()
+    
+    # Get today's check-ins
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    checkins = CheckIn.get_for_user(
+        user_id=user.user_id,
+        start_date=today,
+        is_response=True
+    )
+    
+    logger.debug(f"Found {len(checkins) if checkins else 0} check-ins today for user {user.user_id}")
+    
+    # Get completed tasks for today
+    completed_tasks = Task.get_completed_for_user(
+        user_id=user.user_id,
+        start_date=today
+    )
+    
+    logger.debug(f"Found {len(completed_tasks) if completed_tasks else 0} completed tasks today for user {user.user_id}")
+    
+    # Get sentiment analysis
+    sentiment_trend = analytics_service.get_sentiment_trend(user.user_id)
+    logger.debug(f"Got sentiment trend for user {user.user_id}: {sentiment_trend}")
+    
+    # Get self-care tip
+    self_care_tip = task_service.get_self_care_tip()
+    
+    # Compose the message
+    message = f"Hi {user.name}! 🌙 As we wrap up the day, let's take a gentle moment to reflect.\n\n"
+    
+    if checkins:
+        message += f"Today you shared {len(checkins)} check-ins with me 💭\n"
+    
+    if completed_tasks:
+        message += f"And completed {len(completed_tasks)} tasks ✅\n"
+    
+    if sentiment_trend:
+        message += f"\nYour emotional journey today: {sentiment_trend}\n"
+    
+    message += (
+        f"\nRemember: {self_care_tip}\n\n"
+        f"Would you like to:"
+    )
+    
+    buttons = [
+        {"id": "reflect_day", "title": "Reflect on today"},
+        {"id": "plan_tomorrow", "title": "Plan tomorrow"},
+        {"id": "share_thoughts", "title": "Share thoughts"}
+    ]
+    
+    try:
+        whatsapp_service.send_interactive_buttons(user.user_id, message, buttons)
+        logger.info(f"Successfully sent end of day check-in to user {user.user_id}")
+    except Exception as e:
+        logger.error(f"Failed to send end of day check-in to user {user.user_id}: {str(e)}")
+        raise
 
 def process_end_of_day_response(user, message_text, sentiment_score):
     """
@@ -260,4 +295,7 @@ def send_support_options(user, message=None):
     ]
     
     whatsapp_service.send_interactive_buttons(user.user_id, response, buttons)
-    logger.info(f"Sent support options to {user.user_id}") 
+    logger.info(f"Sent support options to {user.user_id}")
+
+if __name__ == "__main__":
+    send_end_of_day_checkins() 

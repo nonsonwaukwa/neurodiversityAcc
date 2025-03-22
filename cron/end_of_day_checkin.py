@@ -36,6 +36,12 @@ def send_end_of_day_checkins():
     logger.info("Running end of day check-in cron job")
     
     try:
+        # Verify WhatsApp configuration first
+        whatsapp_service = get_whatsapp_service(0)  # Test with default account
+        if not whatsapp_service.check_connection():
+            logger.error("WhatsApp configuration test failed. Please check your credentials.")
+            return
+        
         # Get all active users
         users = User.get_all_active()
         logger.debug(f"Found {len(users) if users else 0} active users")

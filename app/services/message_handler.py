@@ -6,6 +6,7 @@ from app.services.whatsapp import get_whatsapp_service
 from app.services.tasks import get_task_service
 from app.services.analytics import get_analytics_service
 from app.services.conversation_analytics import ConversationAnalyticsService
+from app.models.checkin import CheckIn
 
 logger = logging.getLogger(__name__)
 
@@ -226,22 +227,40 @@ class MessageHandler:
         Handle an incoming message
         
         Args:
-            user (User): The user sending the message
+            user (User): The user who sent the message
             message_text (str): The message text
             
         Returns:
             bool: Whether the message was handled
         """
-        # First check for task update commands
+        # First check if this is a task update command
         if MessageHandler.handle_task_update(user, message_text):
             return True
             
-        # Check for task list request
-        if message_text.lower().strip() in ['tasks', 'list', 'show tasks']:
-            MessageHandler.list_active_tasks(user)
+        # Check if this is transcription feedback
+        if MessageHandler.is_transcription_feedback(message_text):
             return True
             
-        # Check if this is a response to the "add first task" prompt
+        # Check if this is a response to a check-in
+        recent_checkins = CheckIn.get_for_user(user.user_id, limit=1, is_response=False)
+        if recent_checkins:
+            recent_checkin = recent_checkins[0]
+            # Only process as a check-in response if it's from today
+            today = datetime.now(timezone.utc).date()
+            checkin_date = recent_checkin.created_at.date() if recent_checkin.created_at else None
+            
+            if checkin_date and checkin_date == today:
+                # Check if the recent check-in was a system message asking for a response
+                if any(phrase in recent_checkin.response for phrase in [
+                    "How are you feeling",
+                    "A gentle check-in about the week ahead",
+                    "I hope you've been able to rest",
+                    "Whatever you're experiencing is"
+                ]):
+                    # This is a response to a check-in, don't treat it as a task
+                    return False
+            
+        # If we get here, check if this should be treated as a new task
         if user.name and not user.name.startswith('User '):  # User has set their name
             # Get active tasks
             active_tasks = Task.get_for_user(user.user_id, status=[

@@ -67,7 +67,12 @@ class CheckIn:
             "check in" in response.lower() or
             "Good morning" in response or
             "Hey" in response or
-            "tasks would you like" in response
+            "tasks would you like" in response or
+            "A gentle check-in about the week ahead" in response or
+            "I've added your intention" in response or
+            "I hope you've been able to rest" in response or
+            "Whatever you're experiencing is" in response or
+            "Would you like to add another intention" in response
         )
         
         db = get_db()
@@ -164,10 +169,8 @@ class CheckIn:
                 continue
                 
             if is_response is not None:
-                is_system_message = data.get('tracking_type') == CheckIn.TRACKING_TYPE_AI
-                if is_response and is_system_message:
-                    continue
-                if not is_response and not is_system_message:
+                doc_is_response = data.get('is_response', False)
+                if is_response != doc_is_response:
                     continue
             
             checkin = CheckIn(

@@ -6,16 +6,18 @@ from app.services.whatsapp import get_whatsapp_service
 from app.services.tasks import get_task_service
 from app.models.user import User
 from app.models.task import Task
+from app.models.checkin import CheckIn
 from config.firebase_config import get_db
 from app.services.message_handler import MessageHandler
 from app.services.voice import get_voice_service
 from app.services.sentiment import get_sentiment_service
 from app.cron.daily_checkin import process_daily_response, handle_task_button_response, handle_task_selection
 from app.cron.end_of_day_checkin import process_end_of_day_response
+from app.cron.weekly_checkin import process_weekly_response
 from app.models.message import is_duplicate_message, record_message
 from app.tools.voice_monitor import get_voice_monitor
 import random
-from datetime import datetime
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -236,15 +238,7 @@ def whatsapp_webhook():
             logger.info("No message text to process")
             return jsonify({"status": "success", "message": "No message text to process"}), 200
         
-        # Try to handle as a task update command first
-        message_handler = MessageHandler()
-        if message_handler.handle_task_update(user, message_text):
-            return jsonify({"status": "success", "message": "Task update processed"}), 200
-        
-        if message_handler.handle_message(user, message_text):
-            return jsonify({"status": "success", "message": "Message handled by MessageHandler"}), 200
-        
-        # If not a command, process as a response to check-in
+        # First check if this is a response to a check-in
         sentiment_service = get_sentiment_service()
         sentiment_score = sentiment_service.analyze(message_text)
         
@@ -256,53 +250,37 @@ def whatsapp_webhook():
         if recent_checkins:
             recent_checkin = recent_checkins[0]
             # Only process as a check-in response if it's from today
-            today = datetime.now().date()
-            checkin_date = recent_checkin.created_at.date()
+            today = datetime.now(timezone.utc).date()
+            checkin_date = recent_checkin.created_at.date() if recent_checkin.created_at else None
             
-            if checkin_date == today:
+            if checkin_date and checkin_date == today:
                 checkin_type = recent_checkin.type
                 if checkin_type == CheckIn.TYPE_END_OF_DAY:
                     process_end_of_day_response(user, message_text, sentiment_score)
+                elif checkin_type == CheckIn.TYPE_WEEKLY:
+                    process_weekly_response(user, message_text, sentiment_score)
                 else:
                     process_daily_response(user, message_text, sentiment_score)
-            else:
-                # If check-in is old, treat as a normal message
-                message_handler = MessageHandler()
-                message_handler.handle_message(user, message_text)
-        else:
-            # Default to message handler if no recent check-in found
-            message_handler = MessageHandler()
-            message_handler.handle_message(user, message_text)
+                return jsonify({"status": "success", "message": "Check-in response processed"}), 200
         
-        # If this was a voice note, let's also remind the user that they can use voice notes for check-ins
-        if is_voice_note and random.random() < 0.3:  # Only remind occasionally (30% chance)
-            reminder = "💡 Remember, you can always send voice notes for your check-ins! It's a convenient way to share how you're feeling."
-            whatsapp_service.send_message(from_number, reminder)
+        # If not a check-in response, try to handle as a task update command
+        message_handler = MessageHandler()
+        if message_handler.handle_task_update(user, message_text):
+            return jsonify({"status": "success", "message": "Task update processed"}), 200
         
-        # Add a message handler for transcription feedback
-        if message_handler.is_transcription_feedback(message_text):
-            # Get the last transcription for this user
-            last_transcription = user.get_metadata('last_transcription')
-            
-            if last_transcription:
-                feedback = 'accurate' if message_text.lower() in ['yes', 'y', 'correct', 'accurate'] else 'inaccurate'
-                
-                # Log the feedback
-                voice_monitor = get_voice_monitor()
-                voice_monitor.log_user_feedback(
-                    user_id=from_number,
-                    transcription=last_transcription,
-                    feedback=feedback
-                )
-                
-                # Thank the user for feedback
-                whatsapp_service.send_message(
-                    from_number,
-                    "Thank you for the feedback! It helps us improve our voice recognition."
-                )
-                return jsonify({"status": "success", "message": "Feedback processed"}), 200
+        # If we get here, let the message handler try to process it as a new task
+        if message_handler.handle_message(user, message_text):
+            return jsonify({"status": "success", "message": "Message handled by MessageHandler"}), 200
         
-        return jsonify({"status": "success", "message": "Message processed"}), 200
+        # If nothing handled it, send a default response
+        whatsapp_service.send_message(
+            user.user_id,
+            "I'm not quite sure how to help with that. Would you like to:\n"
+            "1. Add a new intention\n"
+            "2. See your current intentions\n"
+            "3. Get some support"
+        )
+        return jsonify({"status": "success", "message": "Default response sent"}), 200
         
     except Exception as e:
         logger.error(f"Error in webhook: {str(e)}")

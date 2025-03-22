@@ -6,7 +6,7 @@ from app import create_app
 from app.models.user import User
 from app.models.task import Task
 from app.models.checkin import CheckIn
-from app.services.whatsapp import get_whatsapp_service
+from app.services.whatsapp import get_whatsapp_service, WhatsAppService
 from app.services.analytics import get_analytics_service
 from app.services.enhanced_analytics import EnhancedAnalyticsService
 from app.services.conversation_analytics import ConversationAnalyticsService
@@ -36,11 +36,36 @@ def send_end_of_day_checkins():
     logger.info("Running end of day check-in cron job")
     
     try:
+        # Log environment variables for debugging
+        logger.info("Checking environment configuration:")
+        logger.info(f"FLASK_ENV: {os.environ.get('FLASK_ENV')}")
+        logger.info(f"FLASK_DEBUG: {os.environ.get('FLASK_DEBUG')}")
+        logger.info(f"WHATSAPP_API_URL: {os.environ.get('WHATSAPP_API_URL')}")
+        logger.info(f"WHATSAPP_PHONE_NUMBER_ID set: {'Yes' if os.environ.get('WHATSAPP_PHONE_NUMBER_ID') else 'No'}")
+        logger.info(f"WHATSAPP_ACCESS_TOKEN set: {'Yes' if os.environ.get('WHATSAPP_ACCESS_TOKEN') else 'No'}")
+        
+        # Log Flask app configuration
+        logger.info("Checking Flask app configuration:")
+        logger.info(f"WHATSAPP_API_URL from config: {current_app.config.get('WHATSAPP_API_URL')}")
+        logger.info(f"WHATSAPP_PHONE_NUMBER_IDS from config: {current_app.config.get('WHATSAPP_PHONE_NUMBER_IDS')}")
+        logger.info(f"WHATSAPP_ACCESS_TOKENS from config: {current_app.config.get('WHATSAPP_ACCESS_TOKENS')}")
+        
         # Verify WhatsApp configuration first
+        logger.info("Initializing WhatsApp service for testing...")
         whatsapp_service = get_whatsapp_service(0)  # Test with default account
-        if not whatsapp_service.check_connection():
+        
+        # Test connection and log detailed response
+        logger.info("Testing WhatsApp API connection...")
+        connection_result = whatsapp_service.check_connection()
+        if not connection_result:
             logger.error("WhatsApp configuration test failed. Please check your credentials.")
+            # Get account info for more details
+            account_info = whatsapp_service.get_account_info()
+            if account_info:
+                logger.error(f"Account info: {account_info}")
             return
+        
+        logger.info("WhatsApp configuration test passed successfully")
         
         # Get all active users
         users = User.get_all_active()
@@ -69,57 +94,59 @@ def send_end_of_day_checkins():
             # Process each user in this account
             for user in account_users:
                 try:
-                    _send_end_of_day_checkin(user, whatsapp_service)
+                    _send_end_of_day_checkin(user.user_id, whatsapp_service)
                 except Exception as e:
                     logger.error(f"Error sending end of day check-in to user {user.user_id}: {e}", exc_info=True)
                     
     except Exception as e:
         logger.error(f"Unexpected error in end of day check-ins: {e}", exc_info=True)
 
-def _send_end_of_day_checkin(user, whatsapp_service):
-    """
-    Send an end of day check-in message to a user
+def _send_end_of_day_checkin(user_id: str, whatsapp_service: WhatsAppService) -> bool:
+    """Send end of day check-in to a user."""
+    logger.info(f"Sending end of day check-in to user {user_id}")
+
+    # Check if we've already sent an end-of-day message today
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    today_messages = CheckIn.get_for_user(user_id, start_date=today)
     
-    Args:
-        user (User): The user to send check-in to
-        whatsapp_service (WhatsAppService): The WhatsApp service instance
-    """
-    logger.info(f"Sending end of day check-in to user {user.user_id}")
+    # Check if any of today's messages are end-of-day messages
+    for message in today_messages:
+        if message.response and "As we wrap up the day" in message.response:
+            logger.info(f"Already sent end-of-day message to user {user_id} today")
+            return True
+
+    # Get user check-ins for today (excluding system messages)
+    user_checkins = [c for c in today_messages if c.response and 
+                    "As we wrap up the day" not in c.response and
+                    "Would you like to:" not in c.response and
+                    "Just reply with what feels right for you" not in c.response]
+    
+    logger.debug(f"Found {len(user_checkins)} user check-ins today for user {user_id}")
     
     # Get analytics about the user's day
     analytics_service = get_analytics_service()
     task_service = get_task_service()
     
-    # Get today's check-ins
-    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    checkins = CheckIn.get_for_user(
-        user_id=user.user_id,
-        start_date=today,
-        is_response=True
-    )
-    
-    logger.debug(f"Found {len(checkins) if checkins else 0} check-ins today for user {user.user_id}")
-    
     # Get completed tasks for today
     completed_tasks = Task.get_completed_for_user(
-        user_id=user.user_id,
+        user_id=user_id,
         start_date=today
     )
     
-    logger.debug(f"Found {len(completed_tasks) if completed_tasks else 0} completed tasks today for user {user.user_id}")
+    logger.debug(f"Found {len(completed_tasks) if completed_tasks else 0} completed tasks today for user {user_id}")
     
     # Get sentiment analysis
-    sentiment_trend = analytics_service.get_sentiment_trend(user.user_id)
-    logger.debug(f"Got sentiment trend for user {user.user_id}: {sentiment_trend}")
+    sentiment_trend = analytics_service.get_sentiment_trend(user_id)
+    logger.debug(f"Got sentiment trend for user {user_id}: {sentiment_trend}")
     
     # Get self-care tip
     self_care_tip = task_service.get_self_care_tip()
     
     # Compose the message
-    message = f"Hi {user.name}! 🌙 As we wrap up the day, let's take a gentle moment to reflect.\n\n"
+    message = f"Hi {user_id}! 🌙 As we wrap up the day, let's take a gentle moment to reflect.\n\n"
     
-    if checkins:
-        message += f"Today you shared {len(checkins)} check-ins with me 💭\n"
+    if user_checkins:
+        message += f"Today you shared {len(user_checkins)} check-ins with me 💭\n"
     
     if completed_tasks:
         message += f"And completed {len(completed_tasks)} tasks ✅\n"
@@ -137,15 +164,16 @@ def _send_end_of_day_checkin(user, whatsapp_service):
     )
     
     try:
-        response = whatsapp_service.send_message(user.user_id, message)
+        # Send message directly like daily check-in does
+        response = whatsapp_service.send_message(user_id, message)
         if response:
-            logger.info(f"Successfully sent end of day check-in to user {user.user_id}")
+            logger.info(f"Successfully sent end of day check-in to user {user_id}")
             # Store this message as a check-in
-            CheckIn.create(user.user_id, message, CheckIn.TYPE_END_OF_DAY)
+            CheckIn.create(user_id, message, CheckIn.TYPE_END_OF_DAY)
         else:
-            logger.error(f"Failed to send end of day check-in to user {user.user_id}: No response from WhatsApp API")
+            logger.error(f"Failed to send end of day check-in to user {user_id}: No response from WhatsApp API")
     except Exception as e:
-        logger.error(f"Failed to send end of day check-in to user {user.user_id}: {str(e)}")
+        logger.error(f"Failed to send end of day check-in to user {user_id}: {str(e)}")
         raise
 
 def process_end_of_day_response(user, message_text, sentiment_score):

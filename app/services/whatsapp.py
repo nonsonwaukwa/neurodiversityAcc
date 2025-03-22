@@ -73,58 +73,51 @@ class WhatsAppService:
         """Get the properly formatted URL for sending messages"""
         return f"{self.api_url}/{self.phone_number_id}/messages"
     
-    def send_message(self, recipient_number, message_text):
-        """
-        Send a text message to a WhatsApp user
+    def send_message(self, recipient_id, message):
+        """Send a message to a recipient."""
+        logger = logging.getLogger(__name__)
         
-        Args:
-            recipient_number (str): The recipient's WhatsApp number
-            message_text (str): The message to send
-            
-        Returns:
-            bool: Success status
-        """
         try:
-            url = self._get_message_url()
-            logger.debug(f"Sending message to URL: {url}")
-            logger.debug(f"Using phone_number_id: {self.phone_number_id}")
+            # Log the request details
+            logger.debug(f"Sending message to {recipient_id}")
+            logger.debug(f"Message content: {message}")
             
-            headers = {
-                'Authorization': f'Bearer {self.access_token}',
-                'Content-Type': 'application/json'
-            }
+            url = f"{self.api_url}/{self.phone_number_id}/messages"
+            logger.debug(f"API URL: {url}")
             
             data = {
-                'messaging_product': 'whatsapp',
-                'recipient_type': 'individual',
-                'to': recipient_number,
-                'type': 'text',
-                'text': {
-                    'body': message_text
-                }
+                "messaging_product": "whatsapp",
+                "recipient_type": "individual",
+                "to": recipient_id,
+                "type": "text",
+                "text": {"body": message}
             }
+            logger.debug(f"Request data: {data}")
             
-            logger.debug(f"Request data: {json.dumps(data)}")
+            headers = {
+                "Authorization": f"Bearer {self.access_token}",
+                "Content-Type": "application/json"
+            }
+            logger.debug("Headers set (token hidden)")
             
-            response = requests.post(url, headers=headers, json=data)
-            
+            response = requests.post(url, json=data, headers=headers)
             logger.debug(f"Response status code: {response.status_code}")
             logger.debug(f"Response content: {response.text}")
             
             if response.status_code == 200:
-                logger.info(f"Successfully sent message to {recipient_number}")
+                response_data = response.json()
+                logger.info(f"Message sent successfully. Response: {response_data}")
                 return True
             else:
-                logger.error(f"Failed to send message. Status: {response.status_code}, Response: {response.text}")
+                logger.error(f"Failed to send message. Status code: {response.status_code}")
+                logger.error(f"Error response: {response.text}")
                 return False
                 
         except requests.exceptions.RequestException as e:
-            logger.error(f"Network error sending message: {str(e)}")
+            logger.error(f"Network error while sending message: {e}")
             return False
         except Exception as e:
-            logger.error(f"Error sending message: {str(e)}")
-            logger.error(f"API URL: {self.api_url}")
-            logger.error(f"Phone Number ID: {self.phone_number_id}")
+            logger.error(f"Unexpected error while sending message: {e}")
             return False
     
     def send_interactive_message(self, recipient_number, header_text, body_text, buttons):
@@ -471,14 +464,43 @@ class WhatsAppService:
             headers = self.get_headers()
             
             logger.info(f"Testing WhatsApp API connection to: {url}")
+            logger.info(f"Using phone number ID: {self.phone_number_id}")
+            logger.info(f"API URL base: {self.api_url}")
+            
+            # Log headers without the actual token
+            debug_headers = headers.copy()
+            if 'Authorization' in debug_headers:
+                debug_headers['Authorization'] = 'Bearer <token-hidden>'
+            logger.debug(f"Request headers: {debug_headers}")
+            
             response = requests.get(url, headers=headers, timeout=10)
+            
+            logger.debug(f"Response status code: {response.status_code}")
+            logger.debug(f"Response content: {response.text}")
             
             if response.status_code == 200:
                 logger.info("WhatsApp API connection successful")
                 return True
             else:
                 logger.error(f"WhatsApp API connection failed: {response.status_code} - {response.text}")
+                # Check specific error conditions
+                try:
+                    error_data = response.json().get('error', {})
+                    error_code = error_data.get('code')
+                    error_subcode = error_data.get('error_subcode')
+                    logger.error(f"Error code: {error_code}, subcode: {error_subcode}")
+                    
+                    if error_code == 190:
+                        logger.error("Invalid or expired access token")
+                    elif error_code == 100:
+                        if error_subcode == 33:
+                            logger.error("Phone number ID not found or no permission to access it")
+                        else:
+                            logger.error("Invalid phone number ID or API version")
+                except:
+                    pass
                 return False
+            
         except Exception as e:
             logger.error(f"Error checking WhatsApp API connection: {str(e)}")
             return False

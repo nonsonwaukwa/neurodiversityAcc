@@ -69,6 +69,9 @@ def process_weekly_response(user, message_text, sentiment_score):
     logger.info(f"Processing weekly check-in response for user {user.user_id}")
     whatsapp_service = get_whatsapp_service(user.account_index)
     
+    # Store the user's response as a check-in
+    CheckIn.create(user.user_id, message_text, CheckIn.TYPE_WEEKLY, is_response=True, sentiment_score=sentiment_score)
+    
     # Determine planning type based on sentiment
     if sentiment_score < -0.3:  # Overwhelmed/burnt out
         # Switch to daily planning
